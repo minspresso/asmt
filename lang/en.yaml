@@ -97,6 +97,64 @@ checks:
   lb_path_error: "LB returned HTTP %d"
   lb_path_ok: "LB path OK (HTTP %d)"
 
+logs:
+  # Dashboard
+  logs_title: "Log Warnings"
+  logs_empty: "No warnings detected in logs"
+  logs_source: "Source"
+  logs_severity: "Severity"
+  logs_message: "Message"
+  logs_mitigation: "Mitigation"
+  logs_time: "Time"
+
+  # Nginx patterns
+  nginx_worker_connections_title: "Nginx worker connections exhausted"
+  nginx_worker_connections_fix: "Increase worker_connections in nginx.conf (e.g., worker_connections 4096;). Also check worker_rlimit_nofile."
+  nginx_upstream_timeout_title: "Nginx upstream (PHP-FPM) timed out"
+  nginx_upstream_timeout_fix: "Check if PHP-FPM is overloaded or slow. Increase fastcgi_read_timeout in nginx and request_terminate_timeout in php-fpm pool config."
+  nginx_too_many_files_title: "Nginx too many open files"
+  nginx_too_many_files_fix: "Increase system ulimit: ulimit -n 65535. Set worker_rlimit_nofile 65535; in nginx.conf. Add 'LimitNOFILE=65535' in systemd unit."
+  nginx_ssl_handshake_title: "SSL/TLS handshake failed"
+  nginx_ssl_handshake_fix: "Check SSL certificate validity and chain. Verify ssl_protocols and ssl_ciphers in nginx.conf. Run: openssl s_client -connect localhost:443"
+  nginx_upstream_refused_title: "Nginx upstream connection refused"
+  nginx_upstream_refused_fix: "PHP-FPM or backend service is down. Check: systemctl status php*-fpm. Verify the upstream socket/port matches php-fpm pool listen directive."
+  nginx_body_too_large_title: "Client request body too large"
+  nginx_body_too_large_fix: "Increase client_max_body_size in nginx.conf (e.g., client_max_body_size 64m;). Also check upload_max_filesize and post_max_size in php.ini."
+
+  # PHP-FPM patterns
+  php_memory_limit_title: "PHP memory limit exceeded"
+  php_memory_limit_fix: "Increase memory_limit in php.ini (e.g., memory_limit = 256M). Check for memory leaks in plugins. Consider WP_MEMORY_LIMIT in wp-config.php."
+  php_max_execution_title: "PHP max execution time exceeded"
+  php_max_execution_fix: "Increase max_execution_time in php.ini. For WordPress, check for slow plugins or heavy database queries. Consider wp-cron optimization."
+  php_max_children_title: "PHP-FPM max children reached"
+  php_max_children_fix: "Increase pm.max_children in the PHP-FPM pool config (/etc/php/*/fpm/pool.d/). Consider switching to pm = ondemand if memory is limited."
+  php_undefined_func_title: "PHP undefined function call"
+  php_undefined_func_fix: "A required PHP extension is missing. Install it: apt install php-<extension>. Common: php-mysql, php-curl, php-gd, php-xml, php-mbstring."
+  php_fatal_title: "PHP fatal error"
+  php_fatal_fix: "Check the full error in the PHP-FPM log. Common causes: syntax errors, missing files, incompatible plugin updates. Review recent code changes."
+
+  # MariaDB patterns
+  mariadb_too_many_conn_title: "MariaDB too many connections"
+  mariadb_too_many_conn_fix: "Increase max_connections in /etc/mysql/mariadb.conf.d/50-server.cnf. Check for connection leaks. Consider connection pooling (e.g., ProxySQL)."
+  mariadb_deadlock_title: "MariaDB deadlock detected"
+  mariadb_deadlock_fix: "Review transaction isolation level and locking order. Run SHOW ENGINE INNODB STATUS for details. Ensure consistent lock ordering in application code."
+  mariadb_table_full_title: "MariaDB table full"
+  mariadb_table_full_fix: "Check disk space (df -h). Increase tmp_table_size and max_heap_table_size in MariaDB config. Clean up old data if table is too large."
+  mariadb_comm_error_title: "MariaDB communication error"
+  mariadb_comm_error_fix: "Check network stability. Increase wait_timeout and net_read_timeout in MariaDB config. May indicate client connection drops."
+  mariadb_innodb_lock_title: "InnoDB unable to lock"
+  mariadb_innodb_lock_fix: "Another process may hold the lock. Check with: fuser /var/lib/mysql/ib*. Ensure only one MariaDB instance is running."
+
+  # System patterns
+  system_oom_killer_title: "OOM killer activated"
+  system_oom_killer_fix: "Server ran out of memory. Reduce PHP-FPM pm.max_children, lower MariaDB innodb_buffer_pool_size, or add more RAM. Check which process was killed in dmesg."
+  system_fs_error_title: "Filesystem error (EXT4)"
+  system_fs_error_fix: "Filesystem corruption detected. Run fsck on the affected partition (requires unmount or maintenance mode). Check disk health: smartctl -a /dev/sda."
+  system_segfault_title: "Process segmentation fault"
+  system_segfault_fix: "A process crashed. Check dmesg for details. Common causes: corrupted binary, bad memory, incompatible module. Try reinstalling the affected package."
+  system_conntrack_full_title: "Connection tracking table full"
+  system_conntrack_full_fix: "Increase nf_conntrack_max: sysctl -w net.netfilter.nf_conntrack_max=262144. Add to /etc/sysctl.conf for persistence. May indicate DDoS."
+
 alerts:
   status_change: "status change"
   webhook_error: "webhook returned HTTP %d"

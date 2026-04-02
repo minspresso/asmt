@@ -15,8 +15,15 @@ type Config struct {
 	Language      string              `yaml:"language"`
 	CheckInterval Duration            `yaml:"check_interval"`
 	Checks        ChecksConfig        `yaml:"checks"`
+	Logs          LogsConfig          `yaml:"logs"`
 	Healthz       HealthzConfig       `yaml:"healthz"`
 	Alerts        AlertsConfig        `yaml:"alerts"`
+}
+
+type LogsConfig struct {
+	Enabled    bool     `yaml:"enabled"`
+	BufferSize int      `yaml:"buffer_size"`
+	Files      []string `yaml:"files"`
 }
 
 type ServerConfig struct {
@@ -150,6 +157,7 @@ func LoadConfig(path string) (*Config, error) {
 			MariaDB:      MariaDBCheckConfig{Enabled: true},
 			WordPress:    WordPressCheckConfig{Enabled: true, URL: "http://localhost", ExpectBody: "</html>"},
 		},
+		Logs:    LogsConfig{Enabled: true, BufferSize: 200},
 		Healthz: HealthzConfig{CriticalChecks: []string{"nginx", "phpfpm", "mariadb"}},
 		Alerts: AlertsConfig{
 			Log: LogAlertConfig{Enabled: true},

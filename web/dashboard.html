@@ -86,6 +86,61 @@
   .check-message.msg-unknown { color: #8b949e; }
   .check-duration { color: #484f58; font-size: 11px; margin-left: 8px; min-width: 50px; text-align: right; }
   .loading { text-align: center; padding: 40px; color: #8b949e; }
+  .logs-section {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #21262d;
+  }
+  .logs-section h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .logs-empty { color: #8b949e; font-size: 13px; padding: 16px 0; }
+  .log-entry {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+  }
+  .log-entry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .log-title { font-weight: 600; font-size: 14px; }
+  .log-title.sev-error { color: #f85149; }
+  .log-title.sev-warn { color: #d29922; }
+  .log-title.sev-info { color: #8b949e; }
+  .log-source {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #21262d;
+    color: #8b949e;
+  }
+  .log-line {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+    color: #8b949e;
+    word-break: break-all;
+    margin: 6px 0;
+    padding: 6px 8px;
+    background: #0d1117;
+    border-radius: 4px;
+    max-height: 60px;
+    overflow: hidden;
+  }
+  .log-mitigation {
+    font-size: 13px;
+    color: #58a6ff;
+    padding: 6px 0 0 0;
+    border-top: 1px solid #21262d;
+    margin-top: 6px;
+  }
+  .log-time { font-size: 11px; color: #484f58; }
   .error-banner {
     background: #5a1a1a;
     border: 1px solid #f85149;
@@ -106,6 +161,10 @@
   <div class="meta"><span id="lastUpdateLabel">Last updated</span>: <span id="lastUpdate">-</span></div>
   <div id="grid" class="grid">
     <div class="loading" id="loadingText">Loading status data...</div>
+  </div>
+  <div class="logs-section">
+    <h2 id="logsTitle">Log Warnings</h2>
+    <div id="logsContainer" class="logs-empty">No warnings detected in logs</div>
   </div>
 
 <script>
@@ -134,6 +193,11 @@ let i18n = {
     warn: 'Warning',
     critical: 'Critical',
     unknown: 'Unknown'
+  },
+  logs: {
+    logs_title: 'Log Warnings',
+    logs_empty: 'No warnings detected in logs',
+    logs_mitigation: 'Mitigation'
   }
 };
 
@@ -187,6 +251,7 @@ async function loadI18n() {
       if (data.dashboard) i18n.dashboard = { ...i18n.dashboard, ...data.dashboard };
       if (data.components) i18n.components = { ...i18n.components, ...data.components };
       if (data.status) i18n.status = { ...i18n.status, ...data.status };
+      if (data.logs) i18n.logs = { ...i18n.logs, ...data.logs };
       if (data.lang) document.documentElement.lang = data.lang;
     }
   } catch (e) {
@@ -196,7 +261,43 @@ async function loadI18n() {
   document.getElementById('title').textContent = i18n.dashboard.title;
   document.getElementById('lastUpdateLabel').textContent = i18n.dashboard.last_updated;
   document.getElementById('loadingText').textContent = i18n.dashboard.loading;
+  document.getElementById('logsTitle').textContent = i18n.logs.logs_title;
   document.title = i18n.dashboard.title;
+}
+
+function renderLogEntry(entry) {
+  const safeSev = escapeHtml(entry.severity);
+  return `<div class="log-entry">
+    <div class="log-entry-header">
+      <span class="log-title sev-${safeSev}">${escapeHtml(entry.title)}</span>
+      <span class="log-source">${escapeHtml(entry.source)}</span>
+    </div>
+    <div class="log-line">${escapeHtml(entry.line)}</div>
+    <div class="log-mitigation">${escapeHtml(entry.mitigation)}</div>
+    <div class="log-time">${new Date(entry.timestamp).toLocaleString()}</div>
+  </div>`;
+}
+
+async function fetchLogs() {
+  try {
+    const resp = await fetch('/api/logs');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const container = document.getElementById('logsContainer');
+
+    if (!data.entries || data.entries.length === 0) {
+      container.className = 'logs-empty';
+      container.innerHTML = escapeHtml(i18n.logs.logs_empty);
+      return;
+    }
+
+    container.className = '';
+    // Show up to 50 most recent entries in the dashboard
+    const entries = data.entries.slice(0, 50);
+    container.innerHTML = entries.map(renderLogEntry).join('');
+  } catch (e) {
+    // Silently ignore log fetch errors
+  }
 }
 
 async function fetchStatus() {
@@ -238,7 +339,9 @@ async function fetchStatus() {
 // Load translations first, then start polling
 loadI18n().then(() => {
   fetchStatus();
+  fetchLogs();
   setInterval(fetchStatus, 5000);
+  setInterval(fetchLogs, 10000);
 });
 </script>
 </body>

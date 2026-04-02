@@ -44,6 +44,16 @@ checks:
     url: "http://localhost"
     expect_body: "</html>"
 
+# Log watcher: tails log files and matches known error patterns
+# with mitigation advice. Uses a ring buffer (bounded memory).
+logs:
+  enabled: true
+  buffer_size: 200       # Max entries to keep in memory (~100 bytes each)
+  # Custom log file paths (optional). Leave empty to use defaults:
+  # /var/log/nginx/error.log, /var/log/php*-fpm.log,
+  # /var/log/mysql/error.log, /var/log/syslog, /var/log/kern.log
+  files: []
+
 healthz:
   critical_checks: ["nginx", "phpfpm", "mariadb"]
 

@@ -97,6 +97,64 @@ checks:
   lb_path_error: "LB HTTP %d 반환"
   lb_path_ok: "LB 경로 정상 (HTTP %d)"
 
+logs:
+  # 대시보드
+  logs_title: "로그 경고"
+  logs_empty: "로그에서 감지된 경고 없음"
+  logs_source: "출처"
+  logs_severity: "심각도"
+  logs_message: "메시지"
+  logs_mitigation: "조치 방법"
+  logs_time: "시간"
+
+  # Nginx 패턴
+  nginx_worker_connections_title: "Nginx 워커 연결 수 초과"
+  nginx_worker_connections_fix: "nginx.conf에서 worker_connections를 늘리세요 (예: worker_connections 4096;). worker_rlimit_nofile도 확인하세요."
+  nginx_upstream_timeout_title: "Nginx 업스트림 (PHP-FPM) 시간 초과"
+  nginx_upstream_timeout_fix: "PHP-FPM 과부하 또는 느린 응답을 확인하세요. nginx의 fastcgi_read_timeout과 php-fpm 풀의 request_terminate_timeout을 늘리세요."
+  nginx_too_many_files_title: "Nginx 파일 열기 수 초과"
+  nginx_too_many_files_fix: "시스템 ulimit 증가: ulimit -n 65535. nginx.conf에 worker_rlimit_nofile 65535; 설정. systemd 유닛에 'LimitNOFILE=65535' 추가."
+  nginx_ssl_handshake_title: "SSL/TLS 핸드셰이크 실패"
+  nginx_ssl_handshake_fix: "SSL 인증서 유효성과 체인을 확인하세요. nginx.conf의 ssl_protocols과 ssl_ciphers를 검증하세요. 실행: openssl s_client -connect localhost:443"
+  nginx_upstream_refused_title: "Nginx 업스트림 연결 거부"
+  nginx_upstream_refused_fix: "PHP-FPM 또는 백엔드 서비스가 중단되었습니다. 확인: systemctl status php*-fpm. 업스트림 소켓/포트가 php-fpm 풀 listen 설정과 일치하는지 확인하세요."
+  nginx_body_too_large_title: "클라이언트 요청 본문 너무 큼"
+  nginx_body_too_large_fix: "nginx.conf에서 client_max_body_size를 늘리세요 (예: client_max_body_size 64m;). php.ini의 upload_max_filesize와 post_max_size도 확인하세요."
+
+  # PHP-FPM 패턴
+  php_memory_limit_title: "PHP 메모리 제한 초과"
+  php_memory_limit_fix: "php.ini에서 memory_limit를 늘리세요 (예: memory_limit = 256M). 플러그인 메모리 누수를 확인하세요. wp-config.php에서 WP_MEMORY_LIMIT 설정을 고려하세요."
+  php_max_execution_title: "PHP 최대 실행 시간 초과"
+  php_max_execution_fix: "php.ini에서 max_execution_time을 늘리세요. WordPress의 경우 느린 플러그인이나 무거운 DB 쿼리를 확인하세요. wp-cron 최적화를 고려하세요."
+  php_max_children_title: "PHP-FPM 최대 자식 프로세스 도달"
+  php_max_children_fix: "PHP-FPM 풀 설정(/etc/php/*/fpm/pool.d/)에서 pm.max_children을 늘리세요. 메모리가 제한적이면 pm = ondemand로 전환을 고려하세요."
+  php_undefined_func_title: "PHP 정의되지 않은 함수 호출"
+  php_undefined_func_fix: "필요한 PHP 확장 모듈이 없습니다. 설치: apt install php-<확장>. 일반적: php-mysql, php-curl, php-gd, php-xml, php-mbstring."
+  php_fatal_title: "PHP 치명적 오류"
+  php_fatal_fix: "PHP-FPM 로그에서 전체 오류를 확인하세요. 일반적 원인: 구문 오류, 누락된 파일, 호환되지 않는 플러그인 업데이트. 최근 코드 변경사항을 검토하세요."
+
+  # MariaDB 패턴
+  mariadb_too_many_conn_title: "MariaDB 연결 수 초과"
+  mariadb_too_many_conn_fix: "/etc/mysql/mariadb.conf.d/50-server.cnf에서 max_connections를 늘리세요. 연결 누수를 확인하세요. 연결 풀링(예: ProxySQL) 도입을 고려하세요."
+  mariadb_deadlock_title: "MariaDB 데드락 감지"
+  mariadb_deadlock_fix: "트랜잭션 격리 수준과 잠금 순서를 검토하세요. SHOW ENGINE INNODB STATUS로 세부정보를 확인하세요. 애플리케이션 코드에서 일관된 잠금 순서를 보장하세요."
+  mariadb_table_full_title: "MariaDB 테이블 가득 참"
+  mariadb_table_full_fix: "디스크 공간 확인 (df -h). MariaDB 설정에서 tmp_table_size와 max_heap_table_size를 늘리세요. 테이블이 너무 크면 오래된 데이터를 정리하세요."
+  mariadb_comm_error_title: "MariaDB 통신 오류"
+  mariadb_comm_error_fix: "네트워크 안정성을 확인하세요. MariaDB 설정에서 wait_timeout과 net_read_timeout을 늘리세요. 클라이언트 연결 끊김을 나타낼 수 있습니다."
+  mariadb_innodb_lock_title: "InnoDB 잠금 불가"
+  mariadb_innodb_lock_fix: "다른 프로세스가 잠금을 보유하고 있을 수 있습니다. 확인: fuser /var/lib/mysql/ib*. MariaDB 인스턴스가 하나만 실행 중인지 확인하세요."
+
+  # 시스템 패턴
+  system_oom_killer_title: "OOM 킬러 활성화"
+  system_oom_killer_fix: "서버 메모리 부족. PHP-FPM pm.max_children 줄이기, MariaDB innodb_buffer_pool_size 낮추기, 또는 RAM 추가. dmesg에서 종료된 프로세스를 확인하세요."
+  system_fs_error_title: "파일시스템 오류 (EXT4)"
+  system_fs_error_fix: "파일시스템 손상 감지. 영향받은 파티션에 fsck를 실행하세요 (마운트 해제 또는 유지보수 모드 필요). 디스크 상태 확인: smartctl -a /dev/sda."
+  system_segfault_title: "프로세스 세그멘테이션 폴트"
+  system_segfault_fix: "프로세스가 충돌했습니다. dmesg에서 세부정보를 확인하세요. 일반적 원인: 손상된 바이너리, 불량 메모리, 호환되지 않는 모듈. 영향받은 패키지를 재설치해 보세요."
+  system_conntrack_full_title: "연결 추적 테이블 가득 참"
+  system_conntrack_full_fix: "nf_conntrack_max 증가: sysctl -w net.netfilter.nf_conntrack_max=262144. /etc/sysctl.conf에 추가하여 영구 적용. DDoS를 나타낼 수 있습니다."
+
 alerts:
   status_change: "상태 변경"
   webhook_error: "웹훅 HTTP %d 반환"

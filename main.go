@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -15,6 +17,10 @@ import (
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	flag.Parse()
+
+	// Cap Go runtime memory to 80MB, leaving headroom under 100MB total.
+	// This controls GC aggressiveness - Go will GC more often to stay under this limit.
+	debug.SetMemoryLimit(80 * 1024 * 1024)
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
@@ -110,8 +116,25 @@ func main() {
 	scheduler := NewScheduler(checkers, cfg.CheckInterval.Duration, alerter, logger, tr)
 	go scheduler.Start(ctx)
 
+	// Start log watcher
+	var logWatcher *LogWatcher
+	if cfg.Logs.Enabled {
+		var logFiles []LogFileConfig
+		if len(cfg.Logs.Files) > 0 {
+			for _, path := range cfg.Logs.Files {
+				source := guessLogSource(path)
+				logFiles = append(logFiles, LogFileConfig{Path: path, Source: source})
+			}
+		} else {
+			logFiles = DefaultLogFiles()
+		}
+		logWatcher = NewLogWatcher(logFiles, DefaultLogPatterns(), cfg.Logs.BufferSize, tr)
+		go logWatcher.Start(ctx)
+		logger.Info("log watcher started", "files", len(logFiles), "buffer_size", cfg.Logs.BufferSize)
+	}
+
 	// Start HTTP server
-	srv := NewServer(scheduler, cfg, logger, tr)
+	srv := NewServer(scheduler, logWatcher, cfg, logger, tr)
 	httpServer := &http.Server{
 		Addr:         cfg.Server.Address,
 		Handler:      srv.Handler(),
@@ -149,4 +172,18 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 	httpServer.Shutdown(shutdownCtx)
+}
+
+// guessLogSource infers the service name from a log file path.
+func guessLogSource(path string) string {
+	switch {
+	case strings.Contains(path, "nginx"):
+		return "nginx"
+	case strings.Contains(path, "php") && strings.Contains(path, "fpm"):
+		return "php-fpm"
+	case strings.Contains(path, "mysql") || strings.Contains(path, "mariadb"):
+		return "mariadb"
+	default:
+		return "system"
+	}
 }

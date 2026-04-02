@@ -13,18 +13,20 @@ import (
 var dashboardHTML []byte
 
 type Server struct {
-	scheduler *Scheduler
-	config    *Config
-	logger    *slog.Logger
-	tr        *Translations
+	scheduler  *Scheduler
+	logWatcher *LogWatcher
+	config     *Config
+	logger     *slog.Logger
+	tr         *Translations
 }
 
-func NewServer(scheduler *Scheduler, config *Config, logger *slog.Logger, tr *Translations) *Server {
+func NewServer(scheduler *Scheduler, logWatcher *LogWatcher, config *Config, logger *slog.Logger, tr *Translations) *Server {
 	return &Server{
-		scheduler: scheduler,
-		config:    config,
-		logger:    logger,
-		tr:        tr,
+		scheduler:  scheduler,
+		logWatcher: logWatcher,
+		config:     config,
+		logger:     logger,
+		tr:         tr,
 	}
 }
 
@@ -58,6 +60,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.handleDashboard)
 	mux.HandleFunc("GET /api/status", s.handleStatus)
+	mux.HandleFunc("GET /api/logs", s.handleLogs)
 	mux.HandleFunc("GET /api/i18n", s.handleI18n)
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	return securityHeaders(mux)
@@ -109,11 +112,31 @@ func (s *Server) handleI18n(w http.ResponseWriter, r *http.Request) {
 		"dashboard":  s.tr.Section("dashboard"),
 		"components": s.tr.Section("components"),
 		"status":     s.tr.Section("status"),
+		"logs":       s.tr.Section("logs"),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	json.NewEncoder(w).Encode(i18n)
+}
+
+// handleLogs returns recent log warnings with mitigation advice.
+func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store")
+
+	if s.logWatcher == nil {
+		json.NewEncoder(w).Encode(map[string]any{"entries": []any{}})
+		return
+	}
+
+	entries := s.logWatcher.GetEntries()
+	// Return in reverse chronological order (newest first)
+	reversed := make([]LogEntry, len(entries))
+	for i, e := range entries {
+		reversed[len(entries)-1-i] = e
+	}
+	json.NewEncoder(w).Encode(map[string]any{"entries": reversed})
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {

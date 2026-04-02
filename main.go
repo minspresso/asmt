@@ -18,9 +18,9 @@ func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	flag.Parse()
 
-	// Cap Go runtime memory to 80MB, leaving headroom under 100MB total.
+	// Cap Go runtime memory to 50MB.
 	// This controls GC aggressiveness - Go will GC more often to stay under this limit.
-	debug.SetMemoryLimit(80 * 1024 * 1024)
+	debug.SetMemoryLimit(50 * 1024 * 1024)
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 

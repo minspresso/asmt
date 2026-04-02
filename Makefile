@@ -20,12 +20,26 @@ run:
 
 clean:
 	rm -f $(BINARY) serverstat-*.tar.gz
+	rm -rf /tmp/serverstat-*/
 
 # Package a distributable archive (no Go needed on target server)
 # Usage: make dist GOARCH=amd64  (or arm64)
+# Produces: serverstat-VERSION-linux-ARCH.tar.gz
+#   Extracts to: serverstat-VERSION-linux-ARCH/
+#     ├── serverstat
+#     ├── scripts/install.sh
+#     ├── scripts/uninstall.sh
+#     ├── config.yaml
+#     └── README.md
 dist: build
-	tar czf serverstat-$(VERSION)-linux-$(shell go env GOARCH).tar.gz \
-		$(BINARY) scripts/install.sh scripts/uninstall.sh config.yaml README.md
+	$(eval DIST_NAME := serverstat-$(VERSION)-linux-$(shell go env GOARCH))
+	mkdir -p /tmp/$(DIST_NAME)/scripts
+	cp $(BINARY) /tmp/$(DIST_NAME)/
+	cp scripts/install.sh scripts/uninstall.sh /tmp/$(DIST_NAME)/scripts/
+	cp config.yaml README.md /tmp/$(DIST_NAME)/
+	tar -czf $(DIST_NAME).tar.gz -C /tmp $(DIST_NAME)
+	rm -rf /tmp/$(DIST_NAME)
+	@echo "Created: $(DIST_NAME).tar.gz"
 
 # Install on the local server (uses pre-built binary or builds from source)
 install:

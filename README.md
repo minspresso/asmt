@@ -44,25 +44,20 @@ Supports log alerting, webhook (POST JSON), and email (SMTP) on status transitio
 
 ## Install from a release (no Go required)
 
-Download a pre-built binary from the [Releases page](../../releases), then run the installer.
+Run this one-liner on your server. It auto-detects your CPU architecture, fetches the latest release, and installs everything:
 
 ```bash
-# Replace VERSION and ARCH as needed (amd64 or arm64)
-VERSION=v1.0.0
-ARCH=amd64
-
-curl -LO https://github.com/your-org/server-stat/releases/download/${VERSION}/serverstat-${VERSION}-linux-${ARCH}.tar.gz
-tar xzf serverstat-${VERSION}-linux-${ARCH}.tar.gz
-cd serverstat-${VERSION}-linux-${ARCH}
-
-sudo bash scripts/install.sh
+curl -sSL https://raw.githubusercontent.com/minspresso/Server-Stat/main/scripts/get.sh | sudo bash
 ```
 
-The installer:
+That's it. The installer:
+- Detects your CPU architecture (`amd64` or `arm64`) automatically
+- Fetches the latest release version from GitHub
+- Downloads the correct binary
 - Detects your distro, HTTP server (nginx/Apache), and init system (systemd/OpenRC)
-- Copies the binary to `/opt/serverstat/`
-- Generates a starter `config.yaml` based on what it finds
-- Installs and registers a systemd or OpenRC service
+- Installs the binary to `/opt/serverstat/`
+- Generates a starter `config.yaml` tailored to what it finds on your system
+- Registers and enables the service
 
 After installing:
 
@@ -120,7 +115,10 @@ ssh user@server 'sudo bash install.sh'
 ## Uninstall
 
 ```bash
-# Interactive
+# If installed via one-liner
+curl -sSL https://raw.githubusercontent.com/minspresso/Server-Stat/main/scripts/uninstall.sh | sudo bash
+
+# If installed from source (interactive)
 sudo bash scripts/uninstall.sh
 
 # Non-interactive
@@ -182,7 +180,10 @@ Produces `serverstat-VERSION-linux-ARCH.tar.gz` containing the binary, scripts, 
 *.go              — All source (flat package main, ~3100 lines)
 lang/             — Translation YAML files (en, ko)
 web/              — Dashboard HTML (embedded at build time)
-scripts/          — install.sh, uninstall.sh
+scripts/
+  get.sh          — One-liner: detects arch, downloads latest release, installs
+  install.sh      — Installs from a local binary (used by get.sh and make install)
+  uninstall.sh    — Removes binary, config, and service files
 config.yaml       — Reference configuration
 Makefile
 ```

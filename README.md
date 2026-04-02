@@ -192,4 +192,6 @@ Makefile
 
 ## License
 
-See [LICENSE](LICENSE).
+[GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0)
+
+You are free to use, modify, and distribute this software, but any modified version — including use over a network — must also be released under AGPL-3.0 with its source code made available. It cannot be used in closed-source or proprietary products without a separate commercial agreement.

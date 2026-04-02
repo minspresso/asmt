@@ -1,4 +1,5 @@
 serverstat
+server-stat
 *.tar.gz
 *.env
 .env

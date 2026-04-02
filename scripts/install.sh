@@ -78,12 +78,12 @@ else
 
   Option 1: Build on another machine with Go installed, then copy here:
     make build              # builds ./serverstat
-    scp serverstat install.sh uninstall.sh config.yaml user@server:~/
+    scp serverstat scripts/install.sh scripts/uninstall.sh config.yaml user@server:~/
     ssh user@server 'sudo bash install.sh'
 
   Option 2: Use the dist archive:
     make dist               # creates serverstat-VERSION-linux-amd64.tar.gz
-    # Copy the .tar.gz to the server, extract, and run install.sh
+    # Copy the .tar.gz to the server, extract, and run scripts/install.sh
 
   Option 3: Install Go (https://go.dev/dl/) and re-run this script."
 fi

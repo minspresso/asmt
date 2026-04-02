@@ -25,7 +25,7 @@ clean:
 # Usage: make dist GOARCH=amd64  (or arm64)
 dist: build
 	tar czf serverstat-$(VERSION)-linux-$(shell go env GOARCH).tar.gz \
-		$(BINARY) install.sh uninstall.sh config.yaml README.md
+		$(BINARY) scripts/install.sh scripts/uninstall.sh config.yaml README.md
 
 # Install on the local server (uses pre-built binary or builds from source)
 install:
@@ -33,7 +33,7 @@ install:
 		echo "Building binary..."; \
 		CGO_ENABLED=0 go build -ldflags="-s -w" -o $(BINARY) .; \
 	fi
-	sudo bash install.sh
+	sudo bash scripts/install.sh
 
 uninstall:
-	sudo bash uninstall.sh
+	sudo bash scripts/uninstall.sh

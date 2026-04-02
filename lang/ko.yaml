@@ -23,6 +23,7 @@ components:
   linux: "리눅스 OS"
   firewall: "방화벽"
   nginx: "Nginx"
+  apache: "Apache"
   phpfpm: "PHP-FPM"
   mariadb: "MariaDB"
   wordpress: "WordPress"
@@ -53,6 +54,17 @@ checks:
   nginx_config_valid: "설정 유효"
   nginx_request_error: "요청 오류: %s"
   nginx_conn_failed: "연결 실패: %s"
+
+  # Apache
+  apache_not_running: "Apache 미실행 (PID 파일 없음)"
+  apache_invalid_pid: "잘못된 Apache PID 파일 내용"
+  apache_process_not_found: "프로세스 %d 찾을 수 없음"
+  apache_process_not_running: "프로세스 %d 실행 중이 아님"
+  apache_running: "실행 중 (pid %d)"
+  apache_config_failed: "설정 테스트 실패: %s"
+  apache_config_valid: "설정 유효"
+  apache_request_error: "요청 오류: %s"
+  apache_conn_failed: "연결 실패: %s"
 
   # PHP-FPM
   phpfpm_proc_read_error: "/proc 읽기 실패: %s"
@@ -107,6 +119,18 @@ logs:
   logs_mitigation: "조치 방법"
   logs_time: "시간"
 
+  # Apache 패턴
+  apache_max_workers_title: "Apache MaxRequestWorkers 도달"
+  apache_max_workers_fix: "Apache 설정(mpm_prefork.conf 또는 mpm_event.conf)에서 MaxRequestWorkers를 늘리세요. 확인: apachectl -V | grep MPM. KeepAliveTimeout을 줄여 연결을 해제하세요."
+  apache_request_timeout_title: "Apache 요청 시간 초과"
+  apache_request_timeout_fix: "Apache 설정에서 Timeout 지시자를 늘리세요. 백엔드(PHP-FPM/프록시) 과부하를 확인하세요. 액세스 로그에서 느린 요청을 검토하세요."
+  apache_no_space_title: "Apache - 디스크 공간 부족"
+  apache_no_space_fix: "디스크 공간 확인: df -h. 오래된 로그 정리: find /var/log -name '*.gz' -mtime +30 -delete. 로그 로테이션 설정을 확인하세요."
+  apache_client_denied_title: "Apache 클라이언트 접근 거부"
+  apache_client_denied_fix: "Apache 설정의 Require/Allow/Deny 지시자를 검토하세요. .htaccess 파일을 확인하세요. Directory 권한이 예상 접근과 일치하는지 확인하세요."
+  apache_ssl_error_title: "Apache SSL 라이브러리 오류"
+  apache_ssl_error_fix: "SSL 인증서와 키 파일을 확인하세요. SSLCertificateFile과 SSLCertificateKeyFile 경로를 확인하세요."
+
   # Nginx 패턴
   nginx_worker_connections_title: "Nginx 워커 연결 수 초과"
   nginx_worker_connections_fix: "nginx.conf에서 worker_connections를 늘리세요 (예: worker_connections 4096;). worker_rlimit_nofile도 확인하세요."
@@ -127,15 +151,15 @@ logs:
   php_max_execution_title: "PHP 최대 실행 시간 초과"
   php_max_execution_fix: "php.ini에서 max_execution_time을 늘리세요. WordPress의 경우 느린 플러그인이나 무거운 DB 쿼리를 확인하세요. wp-cron 최적화를 고려하세요."
   php_max_children_title: "PHP-FPM 최대 자식 프로세스 도달"
-  php_max_children_fix: "PHP-FPM 풀 설정(/etc/php/*/fpm/pool.d/)에서 pm.max_children을 늘리세요. 메모리가 제한적이면 pm = ondemand로 전환을 고려하세요."
+  php_max_children_fix: "PHP-FPM 풀 설정에서 pm.max_children을 늘리세요. Debian: /etc/php/*/fpm/pool.d/. RHEL: /etc/php-fpm.d/. 메모리가 제한적이면 pm = ondemand를 고려하세요."
   php_undefined_func_title: "PHP 정의되지 않은 함수 호출"
-  php_undefined_func_fix: "필요한 PHP 확장 모듈이 없습니다. 설치: apt install php-<확장>. 일반적: php-mysql, php-curl, php-gd, php-xml, php-mbstring."
+  php_undefined_func_fix: "필요한 PHP 확장 모듈이 없습니다. 패키지 관리자(apt/dnf/pacman)로 설치하세요. 일반적: php-mysql, php-curl, php-gd, php-xml, php-mbstring."
   php_fatal_title: "PHP 치명적 오류"
   php_fatal_fix: "PHP-FPM 로그에서 전체 오류를 확인하세요. 일반적 원인: 구문 오류, 누락된 파일, 호환되지 않는 플러그인 업데이트. 최근 코드 변경사항을 검토하세요."
 
   # MariaDB 패턴
   mariadb_too_many_conn_title: "MariaDB 연결 수 초과"
-  mariadb_too_many_conn_fix: "/etc/mysql/mariadb.conf.d/50-server.cnf에서 max_connections를 늘리세요. 연결 누수를 확인하세요. 연결 풀링(예: ProxySQL) 도입을 고려하세요."
+  mariadb_too_many_conn_fix: "MariaDB 설정에서 max_connections를 늘리세요. Debian: /etc/mysql/mariadb.conf.d/. RHEL: /etc/my.cnf.d/. 연결 누수를 확인하세요."
   mariadb_deadlock_title: "MariaDB 데드락 감지"
   mariadb_deadlock_fix: "트랜잭션 격리 수준과 잠금 순서를 검토하세요. SHOW ENGINE INNODB STATUS로 세부정보를 확인하세요. 애플리케이션 코드에서 일관된 잠금 순서를 보장하세요."
   mariadb_table_full_title: "MariaDB 테이블 가득 참"

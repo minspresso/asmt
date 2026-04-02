@@ -2,7 +2,6 @@ server:
   address: ":8080"
 
 # Language for UI and messages: "en" (English) or "ko" (Korean)
-# To add more languages, create a new file in lang/ (e.g., lang/ja.yaml)
 language: "en"
 
 check_interval: "30s"
@@ -23,20 +22,20 @@ checks:
     enabled: true
     ports: [80, 443, 3306]
 
-  nginx:
+  # HTTP server: supports nginx and Apache
+  # type: "auto" (detect), "nginx", or "apache"
+  http_server:
     enabled: true
-    pid_file: "/run/nginx.pid"
-    interval: "15s"      # Check nginx more frequently
+    type: "auto"
+    pid_file: ""         # Leave empty for auto-detection
 
   phpfpm:
     enabled: true
-    socket: "/run/php/php-fpm.sock"
+    socket: ""           # Leave empty for auto-detection across distros
     port: 0              # Set to e.g. 9000 if using TCP instead of socket
 
   mariadb:
     enabled: true
-    # Use environment variables for sensitive values:
-    #   export MARIADB_DSN="monitor:secret@tcp(127.0.0.1:3306)/mysql"
     dsn: "${MARIADB_DSN}"
 
   wordpress:
@@ -44,18 +43,15 @@ checks:
     url: "http://localhost"
     expect_body: "</html>"
 
-# Log watcher: tails log files and matches known error patterns
-# with mitigation advice. Uses a ring buffer (bounded memory).
+# Log watcher: tails log files and matches known error patterns.
+# Auto-detects log files across Debian, RHEL, Arch, Alpine, and SUSE.
 logs:
   enabled: true
-  buffer_size: 200       # Max entries to keep in memory (~100 bytes each)
-  # Custom log file paths (optional). Leave empty to use defaults:
-  # /var/log/nginx/error.log, /var/log/php*-fpm.log,
-  # /var/log/mysql/error.log, /var/log/syslog, /var/log/kern.log
-  files: []
+  buffer_size: 200
+  files: []              # Leave empty for auto-detection
 
 healthz:
-  critical_checks: ["nginx", "phpfpm", "mariadb"]
+  critical_checks: ["nginx", "apache", "phpfpm", "mariadb"]
 
 alerts:
   log:

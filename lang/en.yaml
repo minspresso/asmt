@@ -23,6 +23,7 @@ components:
   linux: "Linux OS"
   firewall: "Firewall"
   nginx: "Nginx"
+  apache: "Apache"
   phpfpm: "PHP-FPM"
   mariadb: "MariaDB"
   wordpress: "WordPress"
@@ -53,6 +54,17 @@ checks:
   nginx_config_valid: "config valid"
   nginx_request_error: "request error: %s"
   nginx_conn_failed: "connection failed: %s"
+
+  # Apache
+  apache_not_running: "Apache not running (PID file not found)"
+  apache_invalid_pid: "invalid Apache PID file content"
+  apache_process_not_found: "process %d not found"
+  apache_process_not_running: "process %d not running"
+  apache_running: "running (pid %d)"
+  apache_config_failed: "config test failed: %s"
+  apache_config_valid: "config valid"
+  apache_request_error: "request error: %s"
+  apache_conn_failed: "connection failed: %s"
 
   # PHP-FPM
   phpfpm_proc_read_error: "cannot read /proc: %s"
@@ -107,6 +119,18 @@ logs:
   logs_mitigation: "Mitigation"
   logs_time: "Time"
 
+  # Apache patterns
+  apache_max_workers_title: "Apache MaxRequestWorkers reached"
+  apache_max_workers_fix: "Increase MaxRequestWorkers in Apache config (mpm_prefork.conf or mpm_event.conf). Check with: apachectl -V | grep MPM. Reduce KeepAliveTimeout to free connections."
+  apache_request_timeout_title: "Apache request timeout"
+  apache_request_timeout_fix: "Increase Timeout directive in Apache config. Check if backend (PHP-FPM/proxy) is overloaded. Review slow requests in access log."
+  apache_no_space_title: "Apache - no space left on device"
+  apache_no_space_fix: "Check disk space: df -h. Clean up old logs: find /var/log -name '*.gz' -mtime +30 -delete. Check if log rotation is configured."
+  apache_client_denied_title: "Apache client access denied"
+  apache_client_denied_fix: "Review Require/Allow/Deny directives in Apache config. Check .htaccess files. Verify Directory permissions match expected access."
+  apache_ssl_error_title: "Apache SSL library error"
+  apache_ssl_error_fix: "Check SSL certificate and key files. Verify SSLCertificateFile and SSLCertificateKeyFile paths. Run: openssl x509 -in /path/to/cert.pem -text"
+
   # Nginx patterns
   nginx_worker_connections_title: "Nginx worker connections exhausted"
   nginx_worker_connections_fix: "Increase worker_connections in nginx.conf (e.g., worker_connections 4096;). Also check worker_rlimit_nofile."
@@ -127,15 +151,15 @@ logs:
   php_max_execution_title: "PHP max execution time exceeded"
   php_max_execution_fix: "Increase max_execution_time in php.ini. For WordPress, check for slow plugins or heavy database queries. Consider wp-cron optimization."
   php_max_children_title: "PHP-FPM max children reached"
-  php_max_children_fix: "Increase pm.max_children in the PHP-FPM pool config (/etc/php/*/fpm/pool.d/). Consider switching to pm = ondemand if memory is limited."
+  php_max_children_fix: "Increase pm.max_children in the PHP-FPM pool config. Debian: /etc/php/*/fpm/pool.d/. RHEL: /etc/php-fpm.d/. Consider pm = ondemand if memory is limited."
   php_undefined_func_title: "PHP undefined function call"
-  php_undefined_func_fix: "A required PHP extension is missing. Install it: apt install php-<extension>. Common: php-mysql, php-curl, php-gd, php-xml, php-mbstring."
+  php_undefined_func_fix: "A required PHP extension is missing. Install it with your package manager (apt/dnf/pacman). Common: php-mysql, php-curl, php-gd, php-xml, php-mbstring."
   php_fatal_title: "PHP fatal error"
   php_fatal_fix: "Check the full error in the PHP-FPM log. Common causes: syntax errors, missing files, incompatible plugin updates. Review recent code changes."
 
   # MariaDB patterns
   mariadb_too_many_conn_title: "MariaDB too many connections"
-  mariadb_too_many_conn_fix: "Increase max_connections in /etc/mysql/mariadb.conf.d/50-server.cnf. Check for connection leaks. Consider connection pooling (e.g., ProxySQL)."
+  mariadb_too_many_conn_fix: "Increase max_connections in MariaDB config. Debian: /etc/mysql/mariadb.conf.d/. RHEL: /etc/my.cnf.d/. Check for connection leaks."
   mariadb_deadlock_title: "MariaDB deadlock detected"
   mariadb_deadlock_fix: "Review transaction isolation level and locking order. Run SHOW ENGINE INNODB STATUS for details. Ensure consistent lock ordering in application code."
   mariadb_table_full_title: "MariaDB table full"

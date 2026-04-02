@@ -49,7 +49,8 @@ func (c *PHPFPMChecker) checkProcess() CheckResult {
 			continue
 		}
 		name := strings.TrimSpace(string(comm))
-		if name == "php-fpm" {
+		// Match "php-fpm" and versioned variants like "php-fpm8.2"
+		if name == "php-fpm" || strings.HasPrefix(name, "php-fpm") {
 			return CheckResult{
 				Component: "phpfpm-process",
 				Status:    StatusOK,

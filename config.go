@@ -34,10 +34,16 @@ type ChecksConfig struct {
 	LoadBalancer LBCheckConfig        `yaml:"loadbalancer"`
 	Linux        LinuxCheckConfig     `yaml:"linux"`
 	Firewall     FirewallCheckConfig  `yaml:"firewall"`
-	Nginx        NginxCheckConfig     `yaml:"nginx"`
+	HTTPServer   HTTPServerCheckConfig `yaml:"http_server"`
 	PHPFPM       PHPFPMCheckConfig    `yaml:"phpfpm"`
 	MariaDB      MariaDBCheckConfig   `yaml:"mariadb"`
 	WordPress    WordPressCheckConfig `yaml:"wordpress"`
+}
+
+type HTTPServerCheckConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Type    string `yaml:"type"`    // "nginx", "apache", or "auto" (default)
+	PIDFile string `yaml:"pid_file"` // override auto-detected PID file
 }
 
 type LBCheckConfig struct {
@@ -56,12 +62,6 @@ type LinuxCheckConfig struct {
 type FirewallCheckConfig struct {
 	Enabled bool  `yaml:"enabled"`
 	Ports   []int `yaml:"ports"`
-}
-
-type NginxCheckConfig struct {
-	Enabled  bool     `yaml:"enabled"`
-	PIDFile  string   `yaml:"pid_file"`
-	Interval Duration `yaml:"interval"`
 }
 
 type PHPFPMCheckConfig struct {
@@ -152,8 +152,8 @@ func LoadConfig(path string) (*Config, error) {
 			LoadBalancer: LBCheckConfig{Enabled: true},
 			Linux:        LinuxCheckConfig{Enabled: true, DiskWarn: 80, DiskCritical: 90, MemWarn: 85, MemCritical: 95},
 			Firewall:     FirewallCheckConfig{Enabled: true, Ports: []int{80, 443, 3306}},
-			Nginx:        NginxCheckConfig{Enabled: true, PIDFile: "/run/nginx.pid"},
-			PHPFPM:       PHPFPMCheckConfig{Enabled: true, Socket: "/run/php/php-fpm.sock"},
+			HTTPServer:   HTTPServerCheckConfig{Enabled: true, Type: "auto"},
+			PHPFPM:       PHPFPMCheckConfig{Enabled: true},
 			MariaDB:      MariaDBCheckConfig{Enabled: true},
 			WordPress:    WordPressCheckConfig{Enabled: true, URL: "http://localhost", ExpectBody: "</html>"},
 		},

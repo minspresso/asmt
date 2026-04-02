@@ -37,6 +37,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Detect environment
+	distro := DetectDistro()
+	logger.Info("detected environment", "distro", distro.String())
+
 	// Build checkers
 	var checkers []Checker
 	var mariadbChecker *MariaDBChecker
@@ -62,13 +66,33 @@ func main() {
 		})
 	}
 
-	if cfg.Checks.Nginx.Enabled {
-		checkers = append(checkers, NewNginxChecker(cfg.Checks.Nginx.PIDFile, tr))
+	if cfg.Checks.HTTPServer.Enabled {
+		httpType := cfg.Checks.HTTPServer.Type
+		if httpType == "" || httpType == "auto" {
+			httpType = DetectHTTPServer()
+			if httpType != "" {
+				logger.Info("auto-detected HTTP server", "type", httpType)
+			}
+		}
+		switch httpType {
+		case "nginx":
+			pidFile := cfg.Checks.HTTPServer.PIDFile
+			if pidFile == "" {
+				pidFile = FindNginxPID()
+			}
+			checkers = append(checkers, NewNginxChecker(pidFile, tr))
+		case "apache":
+			checkers = append(checkers, NewApacheChecker(cfg.Checks.HTTPServer.PIDFile, tr))
+		}
 	}
 
 	if cfg.Checks.PHPFPM.Enabled {
+		socket := cfg.Checks.PHPFPM.Socket
+		if socket == "" && cfg.Checks.PHPFPM.Port == 0 {
+			socket = FindPHPFPMSocket()
+		}
 		checkers = append(checkers, &PHPFPMChecker{
-			Socket: cfg.Checks.PHPFPM.Socket,
+			Socket: socket,
 			Port:   cfg.Checks.PHPFPM.Port,
 			tr:     tr,
 		})

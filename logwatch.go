@@ -244,18 +244,10 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-// DefaultLogFiles returns standard log file paths for a Debian LEMP stack.
+// DefaultLogFiles auto-detects log files that exist on this system.
+// Works across Debian, RHEL, Arch, Alpine, and SUSE.
 func DefaultLogFiles() []LogFileConfig {
-	return []LogFileConfig{
-		{Path: "/var/log/nginx/error.log", Source: "nginx"},
-		{Path: "/var/log/php8.2-fpm.log", Source: "php-fpm"},
-		{Path: "/var/log/php8.1-fpm.log", Source: "php-fpm"},
-		{Path: "/var/log/php8.0-fpm.log", Source: "php-fpm"},
-		{Path: "/var/log/mysql/error.log", Source: "mariadb"},
-		{Path: "/var/log/mariadb/error.log", Source: "mariadb"},
-		{Path: "/var/log/syslog", Source: "system"},
-		{Path: "/var/log/kern.log", Source: "system"},
-	}
+	return DetectLogFiles()
 }
 
 // DefaultLogPatterns returns known error patterns with i18n keys for titles and mitigations.
@@ -303,6 +295,50 @@ func DefaultLogPatterns() []LogPattern {
 			Source:     "nginx",
 			TitleKey:   "logs.nginx_body_too_large_title",
 			MitigateKey: "logs.nginx_body_too_large_fix",
+		},
+
+		// ---- Apache ----
+		{
+			Substring:  "MaxRequestWorkers",
+			Severity:   LogError,
+			Source:     "apache",
+			TitleKey:   "logs.apache_max_workers_title",
+			MitigateKey: "logs.apache_max_workers_fix",
+		},
+		{
+			Substring:  "server reached MaxRequestWorkers",
+			Severity:   LogError,
+			Source:     "apache",
+			TitleKey:   "logs.apache_max_workers_title",
+			MitigateKey: "logs.apache_max_workers_fix",
+		},
+		{
+			Substring:  "AH00124",
+			Severity:   LogError,
+			Source:     "apache",
+			TitleKey:   "logs.apache_request_timeout_title",
+			MitigateKey: "logs.apache_request_timeout_fix",
+		},
+		{
+			Substring:  "No space left on device",
+			Severity:   LogError,
+			Source:     "apache",
+			TitleKey:   "logs.apache_no_space_title",
+			MitigateKey: "logs.apache_no_space_fix",
+		},
+		{
+			Substring:  "AH01630",
+			Severity:   LogWarn,
+			Source:     "apache",
+			TitleKey:   "logs.apache_client_denied_title",
+			MitigateKey: "logs.apache_client_denied_fix",
+		},
+		{
+			Substring:  "SSL Library Error",
+			Severity:   LogError,
+			Source:     "apache",
+			TitleKey:   "logs.apache_ssl_error_title",
+			MitigateKey: "logs.apache_ssl_error_fix",
 		},
 
 		// ---- PHP-FPM ----

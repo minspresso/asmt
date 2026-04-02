@@ -1,0 +1,57 @@
+server:
+  address: ":8080"
+
+check_interval: "30s"
+
+checks:
+  loadbalancer:
+    enabled: true
+    lb_ip: ""            # Set to your GCP LB external IP to verify full path
+
+  linux:
+    enabled: true
+    disk_warn: 80        # Warn when disk usage exceeds 80%
+    disk_critical: 90    # Critical when disk usage exceeds 90%
+    mem_warn: 85
+    mem_critical: 95
+
+  firewall:
+    enabled: true
+    ports: [80, 443, 3306]
+
+  nginx:
+    enabled: true
+    pid_file: "/run/nginx.pid"
+    interval: "15s"      # Check nginx more frequently
+
+  phpfpm:
+    enabled: true
+    socket: "/run/php/php-fpm.sock"
+    port: 0              # Set to e.g. 9000 if using TCP instead of socket
+
+  mariadb:
+    enabled: true
+    dsn: "monitor:password@tcp(127.0.0.1:3306)/mysql"
+
+  wordpress:
+    enabled: true
+    url: "http://localhost"
+    expect_body: "</html>"
+
+healthz:
+  critical_checks: ["nginx", "phpfpm", "mariadb"]
+
+alerts:
+  log:
+    enabled: true
+  webhook:
+    enabled: false
+    url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+  email:
+    enabled: false
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    from: "monitor@example.com"
+    to: ["admin@example.com"]
+    username: ""
+    password: ""

@@ -102,7 +102,7 @@ if [ ! -f "${INSTALL_DIR}/${CONFIG_FILE}" ]; then
 
     cat > "${INSTALL_DIR}/${CONFIG_FILE}" << YAML
 server:
-  address: ":8080"
+  address: "127.0.0.1:8080"
 
 language: "en"
 check_interval: "30s"
@@ -235,5 +235,5 @@ echo ""
 echo "Next steps:"
 echo "  1. Edit ${INSTALL_DIR}/${CONFIG_FILE}"
 echo "  2. Set environment variables for sensitive values:"
-echo "     export MARIADB_DSN='monitor:pass@tcp(127.0.0.1:3306)/mysql'"
+echo "     export MARIADB_DSN='monitor:<password>@tcp(127.0.0.1:3306)/mysql'"
 echo "  3. Start the service (see command above)"

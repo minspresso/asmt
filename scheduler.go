@@ -86,6 +86,13 @@ func (s *Scheduler) runAll(ctx context.Context) {
 		close(ch)
 	}()
 
+	// Collect alerts to send OUTSIDE the lock to avoid blocking reads
+	type pendingAlert struct {
+		result     CheckResult
+		prevStatus Status
+	}
+	var alerts []pendingAlert
+
 	for cr := range ch {
 		s.mu.Lock()
 		s.results[cr.name] = cr.results
@@ -95,17 +102,22 @@ func (s *Scheduler) runAll(ctx context.Context) {
 			if !exists {
 				s.previousStatus[r.Component] = r.Status
 				if r.Status == StatusCritical || r.Status == StatusWarn {
-					s.alert(ctx, r, StatusUnknown)
+					alerts = append(alerts, pendingAlert{r, StatusUnknown})
 				}
 				continue
 			}
 
 			if r.Status != prevStatus {
-				s.alert(ctx, r, prevStatus)
+				alerts = append(alerts, pendingAlert{r, prevStatus})
 				s.previousStatus[r.Component] = r.Status
 			}
 		}
 		s.mu.Unlock()
+	}
+
+	// Send alerts without holding the lock (prevents slow webhook/SMTP from blocking reads)
+	for _, a := range alerts {
+		s.alert(ctx, a.result, a.prevStatus)
 	}
 }
 
@@ -133,9 +145,14 @@ func (s *Scheduler) GetStatus() map[string][]CheckResult {
 }
 
 // OverallStatus returns the worst status across all checks.
+// Returns StatusUnknown if no checks have reported yet.
 func (s *Scheduler) OverallStatus() Status {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
+	if len(s.results) == 0 {
+		return StatusUnknown
+	}
 
 	worst := StatusOK
 	for _, results := range s.results {
@@ -148,19 +165,18 @@ func (s *Scheduler) OverallStatus() Status {
 	return worst
 }
 
-// CriticalChecksPassing returns true if all checks in the given list are OK or Warn.
+// CriticalChecksPassing returns true only if ALL named checks have reported
+// results and none are Critical. Returns false if any named check has not
+// reported yet (unknown = not passing, to prevent routing traffic to
+// unverified servers).
 func (s *Scheduler) CriticalChecksPassing(names []string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	nameSet := make(map[string]bool, len(names))
-	for _, n := range names {
-		nameSet[n] = true
-	}
-
-	for name, results := range s.results {
-		if !nameSet[name] {
-			continue
+	for _, name := range names {
+		results, exists := s.results[name]
+		if !exists {
+			return false // no data yet = not passing
 		}
 		for _, r := range results {
 			if r.Status == StatusCritical {

@@ -107,6 +107,7 @@ func main() {
 		checkers = append(checkers, NewWordPressChecker(
 			cfg.Checks.WordPress.URL,
 			cfg.Checks.WordPress.ExpectBody,
+			cfg.Checks.WordPress.TLSSkipVerify,
 			tr,
 		))
 	}

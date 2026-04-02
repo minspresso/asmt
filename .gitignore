@@ -1,1 +1,9 @@
 serverstat
+*.tar.gz
+*.env
+.env
+config.local.yaml
+.idea/
+.vscode/
+*.swp
+*~

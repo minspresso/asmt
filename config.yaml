@@ -1,5 +1,6 @@
 server:
-  address: ":8080"
+  # Binds to localhost only by default (safe). Use "0.0.0.0:8080" to expose externally.
+  address: "127.0.0.1:8080"
 
 # Language for UI and messages: "en" (English) or "ko" (Korean)
 language: "en"
@@ -42,6 +43,7 @@ checks:
     enabled: true
     url: "http://localhost"
     expect_body: "</html>"
+    tls_skip_verify: false  # Set true only for self-signed certs
 
 # Log watcher: tails log files and matches known error patterns.
 # Auto-detects log files across Debian, RHEL, Arch, Alpine, and SUSE.

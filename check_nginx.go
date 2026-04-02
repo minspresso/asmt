@@ -135,19 +135,16 @@ func (c *NginxChecker) checkHTTP(ctx context.Context, port int) CheckResult {
 	}
 	resp.Body.Close()
 
+	status := StatusOK
 	if resp.StatusCode >= 500 {
-		return CheckResult{
-			Component: component,
-			Status:    StatusCritical,
-			Message:   fmt.Sprintf("HTTP %d", resp.StatusCode),
-			Details:   map[string]string{"status_code": strconv.Itoa(resp.StatusCode)},
-			CheckedAt: time.Now(),
-		}
+		status = StatusCritical
+	} else if resp.StatusCode == 403 || resp.StatusCode == 401 || resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		status = StatusWarn
 	}
 
 	return CheckResult{
 		Component: component,
-		Status:    StatusOK,
+		Status:    status,
 		Message:   fmt.Sprintf("HTTP %d", resp.StatusCode),
 		Details:   map[string]string{"status_code": strconv.Itoa(resp.StatusCode)},
 		CheckedAt: time.Now(),

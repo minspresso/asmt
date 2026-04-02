@@ -76,9 +76,10 @@ type MariaDBCheckConfig struct {
 }
 
 type WordPressCheckConfig struct {
-	Enabled    bool   `yaml:"enabled"`
-	URL        string `yaml:"url"`
-	ExpectBody string `yaml:"expect_body"`
+	Enabled       bool   `yaml:"enabled"`
+	URL           string `yaml:"url"`
+	ExpectBody    string `yaml:"expect_body"`
+	TLSSkipVerify bool   `yaml:"tls_skip_verify"` // default false; set true only for self-signed certs
 }
 
 type HealthzConfig struct {
@@ -145,7 +146,7 @@ func LoadConfig(path string) (*Config, error) {
 	expanded := expandEnv(string(data))
 
 	cfg := &Config{
-		Server:        ServerConfig{Address: ":8080"},
+		Server:        ServerConfig{Address: "127.0.0.1:8080"},
 		Language:      "en",
 		CheckInterval: Duration{30 * time.Second},
 		Checks: ChecksConfig{

@@ -3,15 +3,18 @@ package main
 import (
 	"context"
 	"database/sql"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
 type MariaDBChecker struct {
-	DSN string
-	tr  *Translations
-	db  *sql.DB
+	DSN    string
+	tr     *Translations
+	db     *sql.DB
+	once   sync.Once
+	initErr error
 }
 
 // NewMariaDBChecker creates a checker with a persistent connection pool.
@@ -23,18 +26,18 @@ func NewMariaDBChecker(dsn string, tr *Translations) *MariaDBChecker {
 func (c *MariaDBChecker) Name() string { return "mariadb" }
 
 func (c *MariaDBChecker) initDB() error {
-	if c.db != nil {
-		return nil
-	}
-	db, err := sql.Open("mysql", c.DSN)
-	if err != nil {
-		return err
-	}
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetMaxOpenConns(2)
-	db.SetMaxIdleConns(1)
-	c.db = db
-	return nil
+	c.once.Do(func() {
+		db, err := sql.Open("mysql", c.DSN)
+		if err != nil {
+			c.initErr = err
+			return
+		}
+		db.SetConnMaxLifetime(5 * time.Minute)
+		db.SetMaxOpenConns(2)
+		db.SetMaxIdleConns(1)
+		c.db = db
+	})
+	return c.initErr
 }
 
 // Close releases the database connection pool. Call on shutdown.

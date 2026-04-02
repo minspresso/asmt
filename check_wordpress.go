@@ -17,7 +17,7 @@ type WordPressChecker struct {
 	client     *http.Client
 }
 
-func NewWordPressChecker(url, expectBody string, tr *Translations) *WordPressChecker {
+func NewWordPressChecker(url, expectBody string, tlsSkipVerify bool, tr *Translations) *WordPressChecker {
 	return &WordPressChecker{
 		URL:        url,
 		ExpectBody: expectBody,
@@ -25,7 +25,7 @@ func NewWordPressChecker(url, expectBody string, tr *Translations) *WordPressChe
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
-				TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+				TLSClientConfig:   &tls.Config{InsecureSkipVerify: tlsSkipVerify},
 				MaxIdleConns:      4,
 				IdleConnTimeout:   60 * time.Second,
 				DisableKeepAlives: false,
@@ -75,6 +75,15 @@ func (c *WordPressChecker) checkSite(ctx context.Context) CheckResult {
 		return CheckResult{
 			Component: "wordpress-site",
 			Status:    StatusCritical,
+			Message:   fmt.Sprintf("HTTP %d", resp.StatusCode),
+			CheckedAt: time.Now(),
+		}
+	}
+
+	if resp.StatusCode >= 400 {
+		return CheckResult{
+			Component: "wordpress-site",
+			Status:    StatusWarn,
 			Message:   fmt.Sprintf("HTTP %d", resp.StatusCode),
 			CheckedAt: time.Now(),
 		}

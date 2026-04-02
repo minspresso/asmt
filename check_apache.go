@@ -143,19 +143,16 @@ func (c *ApacheChecker) checkHTTP(ctx context.Context, port int) CheckResult {
 	}
 	resp.Body.Close()
 
+	status := StatusOK
 	if resp.StatusCode >= 500 {
-		return CheckResult{
-			Component: component,
-			Status:    StatusCritical,
-			Message:   fmt.Sprintf("HTTP %d", resp.StatusCode),
-			Details:   map[string]string{"status_code": strconv.Itoa(resp.StatusCode)},
-			CheckedAt: time.Now(),
-		}
+		status = StatusCritical
+	} else if resp.StatusCode >= 400 {
+		status = StatusWarn
 	}
 
 	return CheckResult{
 		Component: component,
-		Status:    StatusOK,
+		Status:    status,
 		Message:   fmt.Sprintf("HTTP %d", resp.StatusCode),
 		Details:   map[string]string{"status_code": strconv.Itoa(resp.StatusCode)},
 		CheckedAt: time.Now(),

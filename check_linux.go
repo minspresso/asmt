@@ -147,6 +147,10 @@ func (c *LinuxChecker) checkMemory() CheckResult {
 		}
 	}
 
+	// Guard against underflow: availKB > totalKB can happen transiently
+	if availKB > totalKB {
+		availKB = totalKB
+	}
 	usedKB := totalKB - availKB
 	pct := int(usedKB * 100 / totalKB)
 

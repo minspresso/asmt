@@ -65,17 +65,27 @@ info "Detected distro: ${DISTRO}"
 info "Detected HTTP server: ${HTTP_SERVER:-none}"
 info "Detected init system: ${INIT_SYSTEM}"
 
-# --- Build or copy binary ---
+# --- Locate or build binary ---
 if [ -f "./${BINARY_NAME}" ]; then
-    info "Using pre-built binary"
+    info "Using pre-built binary ($(du -h ./${BINARY_NAME} | cut -f1) )"
 elif command -v go &>/dev/null; then
-    info "Building from source..."
-    CGO_ENABLED=0 go build -o "${BINARY_NAME}" .
-elif [ -f "./Makefile" ]; then
-    info "Building with make..."
-    make build
+    info "Go found, building from source..."
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o "${BINARY_NAME}" .
+    info "Built binary ($(du -h ./${BINARY_NAME} | cut -f1) )"
 else
-    error "No pre-built binary found and Go is not installed. Build first with: make build"
+    echo ""
+    error "No pre-built binary found and Go is not installed.
+
+  Option 1: Build on another machine with Go installed, then copy here:
+    make build              # builds ./serverstat
+    scp serverstat install.sh uninstall.sh config.yaml user@server:~/
+    ssh user@server 'sudo bash install.sh'
+
+  Option 2: Use the dist archive:
+    make dist               # creates serverstat-VERSION-linux-amd64.tar.gz
+    # Copy the .tar.gz to the server, extract, and run install.sh
+
+  Option 3: Install Go (https://go.dev/dl/) and re-run this script."
 fi
 
 # --- Install binary ---

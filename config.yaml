@@ -1,6 +1,10 @@
 server:
   address: ":8080"
 
+# Language for UI and messages: "en" (English) or "ko" (Korean)
+# To add more languages, create a new file in lang/ (e.g., lang/ja.yaml)
+language: "en"
+
 check_interval: "30s"
 
 checks:
@@ -31,7 +35,9 @@ checks:
 
   mariadb:
     enabled: true
-    dsn: "monitor:password@tcp(127.0.0.1:3306)/mysql"
+    # Use environment variables for sensitive values:
+    #   export MARIADB_DSN="monitor:secret@tcp(127.0.0.1:3306)/mysql"
+    dsn: "${MARIADB_DSN}"
 
   wordpress:
     enabled: true
@@ -46,12 +52,12 @@ alerts:
     enabled: true
   webhook:
     enabled: false
-    url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+    url: "${WEBHOOK_URL}"
   email:
     enabled: false
     smtp_host: "smtp.gmail.com"
     smtp_port: 587
     from: "monitor@example.com"
     to: ["admin@example.com"]
-    username: ""
-    password: ""
+    username: "${SMTP_USERNAME}"
+    password: "${SMTP_PASSWORD}"

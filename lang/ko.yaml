@@ -1,0 +1,119 @@
+# 한국어 번역 - Server-Stat
+# 새로운 언어를 추가하려면 이 파일을 복사하여 모든 값을 번역하세요.
+# 파일 이름은 언어 코드와 일치해야 합니다 (예: ja.yaml, de.yaml).
+# %s, %d, %.2f 같은 형식 지정자는 번역된 문자열에 그대로 유지해야 합니다.
+
+status:
+  ok: "정상"
+  warn: "경고"
+  critical: "심각"
+  unknown: "알 수 없음"
+  healthy: "정상"
+  unhealthy: "비정상"
+
+dashboard:
+  title: "서버 상태"
+  last_updated: "마지막 업데이트"
+  loading: "상태 데이터 로드 중..."
+  no_checks: "설정된 점검 항목 없음"
+  fetch_error: "상태 가져오기 실패"
+
+components:
+  loadbalancer: "로드 밸런서"
+  linux: "리눅스 OS"
+  firewall: "방화벽"
+  nginx: "Nginx"
+  phpfpm: "PHP-FPM"
+  mariadb: "MariaDB"
+  wordpress: "WordPress"
+
+checks:
+  # 리눅스 - 디스크
+  linux_disk_read_error: "/proc/mounts 읽기 실패: %s"
+  linux_disk_usage: "%s: %d%% 사용 중"
+  linux_disk_no_fs: "점검할 마운트된 파일시스템 없음"
+
+  # 리눅스 - 메모리
+  linux_mem_read_error: "/proc/meminfo 읽기 실패: %s"
+  linux_mem_parse_error: "메모리 정보 파싱 실패"
+  linux_mem_usage: "%d%% 사용 중 (%d MB / %d MB)"
+
+  # 리눅스 - 부하
+  linux_load_read_error: "/proc/loadavg 읽기 실패: %s"
+  linux_load_parse_error: "부하 평균 파싱 실패"
+  linux_load_info: "부하: %.2f %.2f %.2f (CPU: %d개)"
+
+  # Nginx
+  nginx_not_running: "nginx 미실행 (PID 파일 없음)"
+  nginx_invalid_pid: "잘못된 PID 파일 내용"
+  nginx_process_not_found: "프로세스 %d 찾을 수 없음"
+  nginx_process_not_running: "프로세스 %d 실행 중이 아님"
+  nginx_running: "실행 중 (pid %d)"
+  nginx_config_failed: "설정 테스트 실패: %s"
+  nginx_config_valid: "설정 유효"
+  nginx_request_error: "요청 오류: %s"
+  nginx_conn_failed: "연결 실패: %s"
+
+  # PHP-FPM
+  phpfpm_proc_read_error: "/proc 읽기 실패: %s"
+  phpfpm_running: "php-fpm 마스터 프로세스 실행 중"
+  phpfpm_not_found: "php-fpm 프로세스를 찾을 수 없음"
+  phpfpm_tcp_connect_error: "TCP %s 연결 실패: %s"
+  phpfpm_tcp_ok: "TCP %s 응답 중"
+  phpfpm_socket_connect_error: "소켓 %s 연결 실패: %s"
+  phpfpm_socket_ok: "소켓 %s 응답 중"
+
+  # MariaDB
+  mariadb_open_error: "연결 열기 실패: %s"
+  mariadb_ping_failed: "핑 실패: %s"
+  mariadb_connected: "연결 성공"
+  mariadb_query_failed: "쿼리 실패: %s"
+  mariadb_query_ok: "쿼리 실행 성공"
+  mariadb_threads: "활성 연결 %s개"
+
+  # 방화벽
+  firewall_port_unreachable: "포트 %d 접근 불가: %s"
+  firewall_port_open: "포트 %d 열림"
+
+  # WordPress
+  wordpress_request_error: "요청 오류: %s"
+  wordpress_unreachable: "사이트 접근 불가: %s"
+  wordpress_body_read_error: "HTTP %d 이지만 본문 읽기 실패: %s"
+  wordpress_body_not_found: "HTTP %d 이지만 예상 콘텐츠 없음"
+  wordpress_site_ok: "HTTP %d - 사이트 응답 중"
+  wordpress_cron_unreachable: "wp-cron 접근 불가: %s"
+  wordpress_cron_error: "wp-cron HTTP %d 반환"
+  wordpress_cron_ok: "wp-cron HTTP %d"
+  wordpress_api_unreachable: "REST API 접근 불가: %s"
+  wordpress_api_error: "REST API HTTP %d 반환"
+  wordpress_api_ok: "REST API HTTP %d"
+
+  # 로드 밸런서
+  lb_metadata_request_error: "메타데이터 요청 생성 실패: %s"
+  lb_metadata_unreachable: "GCP 메타데이터 서버 접근 불가 (GCP가 아닐 수 있음): %s"
+  lb_metadata_ok: "GCP 인스턴스 감지됨"
+  lb_path_request_error: "요청 오류: %s"
+  lb_path_unreachable: "LB 접근 불가: %s"
+  lb_path_error: "LB HTTP %d 반환"
+  lb_path_ok: "LB 경로 정상 (HTTP %d)"
+
+alerts:
+  status_change: "상태 변경"
+  webhook_error: "웹훅 HTTP %d 반환"
+  email_subject: "[서버 상태] %s: %s → %s"
+  email_component: "구성 요소: %s"
+  email_status: "상태: %s (이전: %s)"
+  email_message: "메시지: %s"
+  email_time: "시간: %s"
+  email_details: "세부 정보:"
+
+server:
+  starting: "서버 시작"
+  shutting_down: "종료 중"
+  running: "Server-Stat 실행 중: %s"
+  dashboard_url: "대시보드: http://localhost%s"
+  health_url: "상태 확인: http://localhost%s/healthz"
+  api_url: "API:       http://localhost%s/api/status"
+  config_error: "설정 파일 로드 실패"
+  server_failed: "서버 실패"
+  alert_failed: "알림 실패"

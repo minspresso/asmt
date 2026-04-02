@@ -1,0 +1,119 @@
+# English translations for Server-Stat
+# To add a new language, copy this file and translate all values.
+# File name must match the language code (e.g., ko.yaml, ja.yaml, de.yaml).
+# Format verbs like %s, %d, %.2f must remain in the translated strings.
+
+status:
+  ok: "OK"
+  warn: "Warning"
+  critical: "Critical"
+  unknown: "Unknown"
+  healthy: "Healthy"
+  unhealthy: "Unhealthy"
+
+dashboard:
+  title: "Server-Stat"
+  last_updated: "Last updated"
+  loading: "Loading status data..."
+  no_checks: "No checks configured"
+  fetch_error: "Failed to fetch status"
+
+components:
+  loadbalancer: "Load Balancer"
+  linux: "Linux OS"
+  firewall: "Firewall"
+  nginx: "Nginx"
+  phpfpm: "PHP-FPM"
+  mariadb: "MariaDB"
+  wordpress: "WordPress"
+
+checks:
+  # Linux - Disk
+  linux_disk_read_error: "cannot read /proc/mounts: %s"
+  linux_disk_usage: "%s: %d%% used"
+  linux_disk_no_fs: "no mounted filesystems found to check"
+
+  # Linux - Memory
+  linux_mem_read_error: "cannot read /proc/meminfo: %s"
+  linux_mem_parse_error: "could not parse memory info"
+  linux_mem_usage: "%d%% used (%d MB / %d MB)"
+
+  # Linux - Load
+  linux_load_read_error: "cannot read /proc/loadavg: %s"
+  linux_load_parse_error: "could not parse load average"
+  linux_load_info: "load: %.2f %.2f %.2f (CPUs: %d)"
+
+  # Nginx
+  nginx_not_running: "nginx not running (PID file not found)"
+  nginx_invalid_pid: "invalid PID file content"
+  nginx_process_not_found: "process %d not found"
+  nginx_process_not_running: "process %d not running"
+  nginx_running: "running (pid %d)"
+  nginx_config_failed: "config test failed: %s"
+  nginx_config_valid: "config valid"
+  nginx_request_error: "request error: %s"
+  nginx_conn_failed: "connection failed: %s"
+
+  # PHP-FPM
+  phpfpm_proc_read_error: "cannot read /proc: %s"
+  phpfpm_running: "php-fpm master process running"
+  phpfpm_not_found: "php-fpm process not found"
+  phpfpm_tcp_connect_error: "cannot connect to TCP %s: %s"
+  phpfpm_tcp_ok: "TCP %s responding"
+  phpfpm_socket_connect_error: "cannot connect to socket %s: %s"
+  phpfpm_socket_ok: "socket %s responding"
+
+  # MariaDB
+  mariadb_open_error: "cannot open connection: %s"
+  mariadb_ping_failed: "ping failed: %s"
+  mariadb_connected: "connected successfully"
+  mariadb_query_failed: "query failed: %s"
+  mariadb_query_ok: "query executed successfully"
+  mariadb_threads: "%s active connections"
+
+  # Firewall
+  firewall_port_unreachable: "port %d unreachable: %s"
+  firewall_port_open: "port %d open"
+
+  # WordPress
+  wordpress_request_error: "request error: %s"
+  wordpress_unreachable: "site unreachable: %s"
+  wordpress_body_read_error: "HTTP %d but cannot read body: %s"
+  wordpress_body_not_found: "HTTP %d but expected content not found"
+  wordpress_site_ok: "HTTP %d - site responding"
+  wordpress_cron_unreachable: "wp-cron unreachable: %s"
+  wordpress_cron_error: "wp-cron returned HTTP %d"
+  wordpress_cron_ok: "wp-cron HTTP %d"
+  wordpress_api_unreachable: "REST API unreachable: %s"
+  wordpress_api_error: "REST API returned HTTP %d"
+  wordpress_api_ok: "REST API HTTP %d"
+
+  # Load Balancer
+  lb_metadata_request_error: "cannot create metadata request: %s"
+  lb_metadata_unreachable: "GCP metadata server unreachable (may not be on GCP): %s"
+  lb_metadata_ok: "GCP instance detected"
+  lb_path_request_error: "request error: %s"
+  lb_path_unreachable: "LB unreachable: %s"
+  lb_path_error: "LB returned HTTP %d"
+  lb_path_ok: "LB path OK (HTTP %d)"
+
+alerts:
+  status_change: "status change"
+  webhook_error: "webhook returned HTTP %d"
+  email_subject: "[Server-Stat] %s: %s → %s"
+  email_component: "Component: %s"
+  email_status: "Status: %s (was %s)"
+  email_message: "Message: %s"
+  email_time: "Time: %s"
+  email_details: "Details:"
+
+server:
+  starting: "starting server"
+  shutting_down: "shutting down"
+  running: "Server-Stat running on %s"
+  dashboard_url: "Dashboard: http://localhost%s"
+  health_url: "Health:    http://localhost%s/healthz"
+  api_url: "API:       http://localhost%s/api/status"
+  config_error: "failed to load config"
+  server_failed: "server failed"
+  alert_failed: "alert failed"

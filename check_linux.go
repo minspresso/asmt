@@ -16,6 +16,7 @@ type LinuxChecker struct {
 	DiskCritical int
 	MemWarn      int
 	MemCritical  int
+	tr           *Translations
 }
 
 func (c *LinuxChecker) Name() string { return "linux" }
@@ -34,7 +35,7 @@ func (c *LinuxChecker) checkDisk() []CheckResult {
 		return []CheckResult{{
 			Component: "linux-disk",
 			Status:    StatusCritical,
-			Message:   "cannot read /proc/mounts: " + err.Error(),
+			Message:   c.tr.T("checks.linux_disk_read_error", err.Error()),
 			CheckedAt: time.Now(),
 		}}
 	}
@@ -66,13 +67,20 @@ func (c *LinuxChecker) checkDisk() []CheckResult {
 			continue
 		}
 
+		// BUG FIX: Use Bavail (user-available) instead of Bfree (includes root-reserved).
+		// On ext4, ~5% is reserved for root. Bfree overstates free space for normal users.
 		total := stat.Blocks * uint64(stat.Bsize)
-		free := stat.Bfree * uint64(stat.Bsize)
-		used := total - free
+		avail := stat.Bavail * uint64(stat.Bsize)
+		used := total - (stat.Bfree * uint64(stat.Bsize))
 		if total == 0 {
 			continue
 		}
-		pct := int(used * 100 / total)
+		// Calculate percentage based on usable space (total - reserved + used)
+		usable := used + avail
+		pct := 0
+		if usable > 0 {
+			pct = int(used * 100 / usable)
+		}
 
 		status := StatusOK
 		if pct >= c.DiskCritical {
@@ -84,12 +92,12 @@ func (c *LinuxChecker) checkDisk() []CheckResult {
 		results = append(results, CheckResult{
 			Component: "linux-disk",
 			Status:    status,
-			Message:   fmt.Sprintf("%s: %d%% used", mountPoint, pct),
+			Message:   c.tr.T("checks.linux_disk_usage", mountPoint, pct),
 			Details: map[string]string{
 				"mount":     mountPoint,
 				"usage_pct": strconv.Itoa(pct),
 				"total_gb":  fmt.Sprintf("%.1f", float64(total)/1e9),
-				"free_gb":   fmt.Sprintf("%.1f", float64(free)/1e9),
+				"avail_gb":  fmt.Sprintf("%.1f", float64(avail)/1e9),
 			},
 			CheckedAt: time.Now(),
 		})
@@ -99,7 +107,7 @@ func (c *LinuxChecker) checkDisk() []CheckResult {
 		results = append(results, CheckResult{
 			Component: "linux-disk",
 			Status:    StatusOK,
-			Message:   "no mounted filesystems found to check",
+			Message:   c.tr.T("checks.linux_disk_no_fs"),
 			CheckedAt: time.Now(),
 		})
 	}
@@ -112,7 +120,7 @@ func (c *LinuxChecker) checkMemory() CheckResult {
 		return CheckResult{
 			Component: "linux-memory",
 			Status:    StatusCritical,
-			Message:   "cannot read /proc/meminfo: " + err.Error(),
+			Message:   c.tr.T("checks.linux_mem_read_error", err.Error()),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -134,7 +142,7 @@ func (c *LinuxChecker) checkMemory() CheckResult {
 		return CheckResult{
 			Component: "linux-memory",
 			Status:    StatusUnknown,
-			Message:   "could not parse memory info",
+			Message:   c.tr.T("checks.linux_mem_parse_error"),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -152,7 +160,7 @@ func (c *LinuxChecker) checkMemory() CheckResult {
 	return CheckResult{
 		Component: "linux-memory",
 		Status:    status,
-		Message:   fmt.Sprintf("%d%% used (%d MB / %d MB)", pct, usedKB/1024, totalKB/1024),
+		Message:   c.tr.T("checks.linux_mem_usage", pct, usedKB/1024, totalKB/1024),
 		Details: map[string]string{
 			"usage_pct":    strconv.Itoa(pct),
 			"total_mb":     strconv.FormatUint(totalKB/1024, 10),
@@ -168,7 +176,7 @@ func (c *LinuxChecker) checkLoadAvg() CheckResult {
 		return CheckResult{
 			Component: "linux-load",
 			Status:    StatusCritical,
-			Message:   "cannot read /proc/loadavg: " + err.Error(),
+			Message:   c.tr.T("checks.linux_load_read_error", err.Error()),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -178,7 +186,7 @@ func (c *LinuxChecker) checkLoadAvg() CheckResult {
 		return CheckResult{
 			Component: "linux-load",
 			Status:    StatusUnknown,
-			Message:   "could not parse load average",
+			Message:   c.tr.T("checks.linux_load_parse_error"),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -198,7 +206,7 @@ func (c *LinuxChecker) checkLoadAvg() CheckResult {
 	return CheckResult{
 		Component: "linux-load",
 		Status:    status,
-		Message:   fmt.Sprintf("load: %.2f %.2f %.2f (CPUs: %d)", load1, load5, load15, int(numCPU)),
+		Message:   c.tr.T("checks.linux_load_info", load1, load5, load15, int(numCPU)),
 		Details: map[string]string{
 			"load_1m":  fields[0],
 			"load_5m":  fields[1],

@@ -16,13 +16,15 @@ type Server struct {
 	scheduler *Scheduler
 	config    *Config
 	logger    *slog.Logger
+	tr        *Translations
 }
 
-func NewServer(scheduler *Scheduler, config *Config, logger *slog.Logger) *Server {
+func NewServer(scheduler *Scheduler, config *Config, logger *slog.Logger, tr *Translations) *Server {
 	return &Server{
 		scheduler: scheduler,
 		config:    config,
 		logger:    logger,
+		tr:        tr,
 	}
 }
 
@@ -41,12 +43,24 @@ type checkResultJSON struct {
 	Duration  string            `json:"duration"`
 }
 
+// securityHeaders adds common security headers to responses.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "0")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.handleDashboard)
 	mux.HandleFunc("GET /api/status", s.handleStatus)
+	mux.HandleFunc("GET /api/i18n", s.handleI18n)
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
-	return mux
+	return securityHeaders(mux)
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -55,6 +69,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
 	w.Write(dashboardHTML)
 }
 
@@ -83,18 +98,34 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// handleI18n returns translations for the dashboard frontend.
+func (s *Server) handleI18n(w http.ResponseWriter, r *http.Request) {
+	i18n := map[string]any{
+		"lang":       s.tr.Lang(),
+		"dashboard":  s.tr.Section("dashboard"),
+		"components": s.tr.Section("components"),
+		"status":     s.tr.Section("status"),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	json.NewEncoder(w).Encode(i18n)
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	passing := s.scheduler.CriticalChecksPassing(s.config.Healthz.CriticalChecks)
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store")
 	if passing {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"healthy"}`))
+		w.Write([]byte(`{"status":"` + s.tr.T("status.healthy") + `"}`))
 	} else {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte(`{"status":"unhealthy"}`))
+		w.Write([]byte(`{"status":"` + s.tr.T("status.unhealthy") + `"}`))
 	}
 }

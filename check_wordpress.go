@@ -13,6 +13,25 @@ import (
 type WordPressChecker struct {
 	URL        string
 	ExpectBody string
+	tr         *Translations
+	client     *http.Client
+}
+
+func NewWordPressChecker(url, expectBody string, tr *Translations) *WordPressChecker {
+	return &WordPressChecker{
+		URL:        url,
+		ExpectBody: expectBody,
+		tr:         tr,
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+				MaxIdleConns:      4,
+				IdleConnTimeout:   60 * time.Second,
+				DisableKeepAlives: false,
+			},
+		},
+	}
 }
 
 func (c *WordPressChecker) Name() string { return "wordpress" }
@@ -25,17 +44,7 @@ func (c *WordPressChecker) Check(ctx context.Context) []CheckResult {
 	return results
 }
 
-func (c *WordPressChecker) httpClient() *http.Client {
-	return &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-	}
-}
-
 func (c *WordPressChecker) checkSite(ctx context.Context) CheckResult {
-	client := c.httpClient()
 	url := c.URL
 	if url == "" {
 		url = "http://localhost"
@@ -46,17 +55,17 @@ func (c *WordPressChecker) checkSite(ctx context.Context) CheckResult {
 		return CheckResult{
 			Component: "wordpress-site",
 			Status:    StatusCritical,
-			Message:   "request error: " + err.Error(),
+			Message:   c.tr.T("checks.wordpress_request_error", err.Error()),
 			CheckedAt: time.Now(),
 		}
 	}
 
-	resp, err := client.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return CheckResult{
 			Component: "wordpress-site",
 			Status:    StatusCritical,
-			Message:   "site unreachable: " + err.Error(),
+			Message:   c.tr.T("checks.wordpress_unreachable", err.Error()),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -77,7 +86,7 @@ func (c *WordPressChecker) checkSite(ctx context.Context) CheckResult {
 			return CheckResult{
 				Component: "wordpress-site",
 				Status:    StatusWarn,
-				Message:   fmt.Sprintf("HTTP %d but cannot read body: %s", resp.StatusCode, err.Error()),
+				Message:   c.tr.T("checks.wordpress_body_read_error", resp.StatusCode, err.Error()),
 				CheckedAt: time.Now(),
 			}
 		}
@@ -85,7 +94,7 @@ func (c *WordPressChecker) checkSite(ctx context.Context) CheckResult {
 			return CheckResult{
 				Component: "wordpress-site",
 				Status:    StatusWarn,
-				Message:   fmt.Sprintf("HTTP %d but expected content not found", resp.StatusCode),
+				Message:   c.tr.T("checks.wordpress_body_not_found", resp.StatusCode),
 				CheckedAt: time.Now(),
 			}
 		}
@@ -94,13 +103,12 @@ func (c *WordPressChecker) checkSite(ctx context.Context) CheckResult {
 	return CheckResult{
 		Component: "wordpress-site",
 		Status:    StatusOK,
-		Message:   fmt.Sprintf("HTTP %d - site responding", resp.StatusCode),
+		Message:   c.tr.T("checks.wordpress_site_ok", resp.StatusCode),
 		CheckedAt: time.Now(),
 	}
 }
 
 func (c *WordPressChecker) checkWPCron(ctx context.Context) CheckResult {
-	client := c.httpClient()
 	url := strings.TrimRight(c.URL, "/") + "/wp-cron.php?doing_wp_cron"
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -108,17 +116,17 @@ func (c *WordPressChecker) checkWPCron(ctx context.Context) CheckResult {
 		return CheckResult{
 			Component: "wordpress-cron",
 			Status:    StatusCritical,
-			Message:   "request error: " + err.Error(),
+			Message:   c.tr.T("checks.wordpress_request_error", err.Error()),
 			CheckedAt: time.Now(),
 		}
 	}
 
-	resp, err := client.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return CheckResult{
 			Component: "wordpress-cron",
 			Status:    StatusWarn,
-			Message:   "wp-cron unreachable: " + err.Error(),
+			Message:   c.tr.T("checks.wordpress_cron_unreachable", err.Error()),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -128,7 +136,7 @@ func (c *WordPressChecker) checkWPCron(ctx context.Context) CheckResult {
 		return CheckResult{
 			Component: "wordpress-cron",
 			Status:    StatusCritical,
-			Message:   fmt.Sprintf("wp-cron returned HTTP %d", resp.StatusCode),
+			Message:   c.tr.T("checks.wordpress_cron_error", resp.StatusCode),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -136,13 +144,12 @@ func (c *WordPressChecker) checkWPCron(ctx context.Context) CheckResult {
 	return CheckResult{
 		Component: "wordpress-cron",
 		Status:    StatusOK,
-		Message:   fmt.Sprintf("wp-cron HTTP %d", resp.StatusCode),
+		Message:   c.tr.T("checks.wordpress_cron_ok", resp.StatusCode),
 		CheckedAt: time.Now(),
 	}
 }
 
 func (c *WordPressChecker) checkRESTAPI(ctx context.Context) CheckResult {
-	client := c.httpClient()
 	url := strings.TrimRight(c.URL, "/") + "/wp-json/"
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -150,17 +157,17 @@ func (c *WordPressChecker) checkRESTAPI(ctx context.Context) CheckResult {
 		return CheckResult{
 			Component: "wordpress-api",
 			Status:    StatusCritical,
-			Message:   "request error: " + err.Error(),
+			Message:   c.tr.T("checks.wordpress_request_error", err.Error()),
 			CheckedAt: time.Now(),
 		}
 	}
 
-	resp, err := client.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return CheckResult{
 			Component: "wordpress-api",
 			Status:    StatusWarn,
-			Message:   "REST API unreachable: " + err.Error(),
+			Message:   c.tr.T("checks.wordpress_api_unreachable", err.Error()),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -170,7 +177,7 @@ func (c *WordPressChecker) checkRESTAPI(ctx context.Context) CheckResult {
 		return CheckResult{
 			Component: "wordpress-api",
 			Status:    StatusCritical,
-			Message:   fmt.Sprintf("REST API returned HTTP %d", resp.StatusCode),
+			Message:   c.tr.T("checks.wordpress_api_error", resp.StatusCode),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -178,7 +185,7 @@ func (c *WordPressChecker) checkRESTAPI(ctx context.Context) CheckResult {
 	return CheckResult{
 		Component: "wordpress-api",
 		Status:    StatusOK,
-		Message:   fmt.Sprintf("REST API HTTP %d", resp.StatusCode),
+		Message:   c.tr.T("checks.wordpress_api_ok", resp.StatusCode),
 		CheckedAt: time.Now(),
 	}
 }

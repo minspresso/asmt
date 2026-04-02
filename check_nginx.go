@@ -14,6 +14,16 @@ import (
 
 type NginxChecker struct {
 	PIDFile string
+	tr      *Translations
+	client  *http.Client
+}
+
+func NewNginxChecker(pidFile string, tr *Translations) *NginxChecker {
+	return &NginxChecker{
+		PIDFile: pidFile,
+		tr:      tr,
+		client:  &http.Client{Timeout: 5 * time.Second},
+	}
 }
 
 func (c *NginxChecker) Name() string { return "nginx" }
@@ -37,7 +47,7 @@ func (c *NginxChecker) checkProcess() CheckResult {
 		return CheckResult{
 			Component: "nginx-process",
 			Status:    StatusCritical,
-			Message:   "nginx not running (PID file not found)",
+			Message:   c.tr.T("checks.nginx_not_running"),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -47,7 +57,7 @@ func (c *NginxChecker) checkProcess() CheckResult {
 		return CheckResult{
 			Component: "nginx-process",
 			Status:    StatusCritical,
-			Message:   "invalid PID file content",
+			Message:   c.tr.T("checks.nginx_invalid_pid"),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -57,7 +67,7 @@ func (c *NginxChecker) checkProcess() CheckResult {
 		return CheckResult{
 			Component: "nginx-process",
 			Status:    StatusCritical,
-			Message:   fmt.Sprintf("process %d not found", pid),
+			Message:   c.tr.T("checks.nginx_process_not_found", pid),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -66,7 +76,7 @@ func (c *NginxChecker) checkProcess() CheckResult {
 		return CheckResult{
 			Component: "nginx-process",
 			Status:    StatusCritical,
-			Message:   fmt.Sprintf("process %d not running", pid),
+			Message:   c.tr.T("checks.nginx_process_not_running", pid),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -74,7 +84,7 @@ func (c *NginxChecker) checkProcess() CheckResult {
 	return CheckResult{
 		Component: "nginx-process",
 		Status:    StatusOK,
-		Message:   fmt.Sprintf("running (pid %d)", pid),
+		Message:   c.tr.T("checks.nginx_running", pid),
 		Details:   map[string]string{"pid": strconv.Itoa(pid)},
 		CheckedAt: time.Now(),
 	}
@@ -87,7 +97,7 @@ func (c *NginxChecker) checkConfig(ctx context.Context) CheckResult {
 		return CheckResult{
 			Component: "nginx-config",
 			Status:    StatusCritical,
-			Message:   "config test failed: " + strings.TrimSpace(string(output)),
+			Message:   c.tr.T("checks.nginx_config_failed", strings.TrimSpace(string(output))),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -95,31 +105,31 @@ func (c *NginxChecker) checkConfig(ctx context.Context) CheckResult {
 	return CheckResult{
 		Component: "nginx-config",
 		Status:    StatusOK,
-		Message:   "config valid",
+		Message:   c.tr.T("checks.nginx_config_valid"),
 		CheckedAt: time.Now(),
 	}
 }
 
 func (c *NginxChecker) checkHTTP(ctx context.Context, port int) CheckResult {
-	client := &http.Client{Timeout: 5 * time.Second}
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
+	component := fmt.Sprintf("nginx-http-%d", port)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return CheckResult{
-			Component: fmt.Sprintf("nginx-http-%d", port),
+			Component: component,
 			Status:    StatusCritical,
-			Message:   "request error: " + err.Error(),
+			Message:   c.tr.T("checks.nginx_request_error", err.Error()),
 			CheckedAt: time.Now(),
 		}
 	}
 
-	resp, err := client.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return CheckResult{
-			Component: fmt.Sprintf("nginx-http-%d", port),
+			Component: component,
 			Status:    StatusCritical,
-			Message:   "connection failed: " + err.Error(),
+			Message:   c.tr.T("checks.nginx_conn_failed", err.Error()),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -127,7 +137,7 @@ func (c *NginxChecker) checkHTTP(ctx context.Context, port int) CheckResult {
 
 	if resp.StatusCode >= 500 {
 		return CheckResult{
-			Component: fmt.Sprintf("nginx-http-%d", port),
+			Component: component,
 			Status:    StatusCritical,
 			Message:   fmt.Sprintf("HTTP %d", resp.StatusCode),
 			Details:   map[string]string{"status_code": strconv.Itoa(resp.StatusCode)},
@@ -136,7 +146,7 @@ func (c *NginxChecker) checkHTTP(ctx context.Context, port int) CheckResult {
 	}
 
 	return CheckResult{
-		Component: fmt.Sprintf("nginx-http-%d", port),
+		Component: component,
 		Status:    StatusOK,
 		Message:   fmt.Sprintf("HTTP %d", resp.StatusCode),
 		Details:   map[string]string{"status_code": strconv.Itoa(resp.StatusCode)},

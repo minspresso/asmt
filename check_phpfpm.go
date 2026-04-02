@@ -13,6 +13,7 @@ import (
 type PHPFPMChecker struct {
 	Socket string
 	Port   int
+	tr     *Translations
 }
 
 func (c *PHPFPMChecker) Name() string { return "phpfpm" }
@@ -30,7 +31,7 @@ func (c *PHPFPMChecker) checkProcess() CheckResult {
 		return CheckResult{
 			Component: "phpfpm-process",
 			Status:    StatusCritical,
-			Message:   "cannot read /proc: " + err.Error(),
+			Message:   c.tr.T("checks.phpfpm_proc_read_error", err.Error()),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -39,7 +40,7 @@ func (c *PHPFPMChecker) checkProcess() CheckResult {
 		if !entry.IsDir() {
 			continue
 		}
-		if entry.Name()[0] < '0' || entry.Name()[0] > '9' {
+		if len(entry.Name()) == 0 || entry.Name()[0] < '0' || entry.Name()[0] > '9' {
 			continue
 		}
 
@@ -52,7 +53,7 @@ func (c *PHPFPMChecker) checkProcess() CheckResult {
 			return CheckResult{
 				Component: "phpfpm-process",
 				Status:    StatusOK,
-				Message:   "php-fpm master process running",
+				Message:   c.tr.T("checks.phpfpm_running"),
 				Details:   map[string]string{"pid": entry.Name()},
 				CheckedAt: time.Now(),
 			}
@@ -62,7 +63,7 @@ func (c *PHPFPMChecker) checkProcess() CheckResult {
 	return CheckResult{
 		Component: "phpfpm-process",
 		Status:    StatusCritical,
-		Message:   "php-fpm process not found",
+		Message:   c.tr.T("checks.phpfpm_not_found"),
 		CheckedAt: time.Now(),
 	}
 }
@@ -75,7 +76,7 @@ func (c *PHPFPMChecker) checkSocket() CheckResult {
 			return CheckResult{
 				Component: "phpfpm-socket",
 				Status:    StatusCritical,
-				Message:   fmt.Sprintf("cannot connect to TCP %s: %s", addr, err.Error()),
+				Message:   c.tr.T("checks.phpfpm_tcp_connect_error", addr, err.Error()),
 				CheckedAt: time.Now(),
 			}
 		}
@@ -83,7 +84,7 @@ func (c *PHPFPMChecker) checkSocket() CheckResult {
 		return CheckResult{
 			Component: "phpfpm-socket",
 			Status:    StatusOK,
-			Message:   fmt.Sprintf("TCP %s responding", addr),
+			Message:   c.tr.T("checks.phpfpm_tcp_ok", addr),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -98,7 +99,7 @@ func (c *PHPFPMChecker) checkSocket() CheckResult {
 		return CheckResult{
 			Component: "phpfpm-socket",
 			Status:    StatusCritical,
-			Message:   fmt.Sprintf("cannot connect to socket %s: %s", socket, err.Error()),
+			Message:   c.tr.T("checks.phpfpm_socket_connect_error", socket, err.Error()),
 			CheckedAt: time.Now(),
 		}
 	}
@@ -107,7 +108,7 @@ func (c *PHPFPMChecker) checkSocket() CheckResult {
 	return CheckResult{
 		Component: "phpfpm-socket",
 		Status:    StatusOK,
-		Message:   fmt.Sprintf("socket %s responding", socket),
+		Message:   c.tr.T("checks.phpfpm_socket_ok", socket),
 		CheckedAt: time.Now(),
 	}
 }

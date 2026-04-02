@@ -15,9 +15,14 @@ type Scheduler struct {
 	interval       time.Duration
 	alerter        Alerter
 	logger         *slog.Logger
+	tr             *Translations
 }
 
-func NewScheduler(checkers []Checker, interval time.Duration, alerter Alerter, logger *slog.Logger) *Scheduler {
+func NewScheduler(checkers []Checker, interval time.Duration, alerter Alerter, logger *slog.Logger, tr *Translations) *Scheduler {
+	// Guard against zero/negative interval (would panic in NewTicker)
+	if interval <= 0 {
+		interval = 30 * time.Second
+	}
 	return &Scheduler{
 		checkers:       checkers,
 		results:        make(map[string][]CheckResult),
@@ -25,6 +30,7 @@ func NewScheduler(checkers []Checker, interval time.Duration, alerter Alerter, l
 		interval:       interval,
 		alerter:        alerter,
 		logger:         logger,
+		tr:             tr,
 	}
 }
 
@@ -67,7 +73,6 @@ func (s *Scheduler) runAll(ctx context.Context) {
 			results := c.Check(checkCtx)
 			duration := time.Since(start)
 
-			// Set duration on all results
 			for i := range results {
 				results[i].Duration = duration
 			}
@@ -85,7 +90,6 @@ func (s *Scheduler) runAll(ctx context.Context) {
 		s.mu.Lock()
 		s.results[cr.name] = cr.results
 
-		// Check for status transitions and alert
 		for _, r := range cr.results {
 			prevStatus, exists := s.previousStatus[r.Component]
 			if !exists {
@@ -110,7 +114,7 @@ func (s *Scheduler) alert(ctx context.Context, result CheckResult, prevStatus St
 		return
 	}
 	if err := s.alerter.Alert(ctx, result, prevStatus); err != nil {
-		s.logger.Error("alert failed", "component", result.Component, "error", err)
+		s.logger.Error(s.tr.T("server.alert_failed"), "component", result.Component, "error", err)
 	}
 }
 

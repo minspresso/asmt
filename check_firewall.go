@@ -9,6 +9,7 @@ import (
 
 type FirewallChecker struct {
 	Ports []int
+	tr    *Translations
 }
 
 func (c *FirewallChecker) Name() string { return "firewall" }
@@ -28,7 +29,7 @@ func (c *FirewallChecker) checkPort(port int) CheckResult {
 		return CheckResult{
 			Component: fmt.Sprintf("firewall-port-%d", port),
 			Status:    StatusCritical,
-			Message:   fmt.Sprintf("port %d unreachable: %s", port, err.Error()),
+			Message:   c.tr.T("checks.firewall_port_unreachable", port, err.Error()),
 			Details:   map[string]string{"port": fmt.Sprintf("%d", port)},
 			CheckedAt: time.Now(),
 		}
@@ -38,7 +39,7 @@ func (c *FirewallChecker) checkPort(port int) CheckResult {
 	return CheckResult{
 		Component: fmt.Sprintf("firewall-port-%d", port),
 		Status:    StatusOK,
-		Message:   fmt.Sprintf("port %d open", port),
+		Message:   c.tr.T("checks.firewall_port_open", port),
 		Details:   map[string]string{"port": fmt.Sprintf("%d", port)},
 		CheckedAt: time.Now(),
 	}

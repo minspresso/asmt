@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Server-Stat Dashboard</title>
+<title>Server-Stat</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -55,7 +55,6 @@
   .card-title {
     font-size: 16px;
     font-weight: 600;
-    text-transform: capitalize;
   }
   .card-status {
     width: 12px;
@@ -100,26 +99,49 @@
 </head>
 <body>
   <div class="header">
-    <h1>Server-Stat</h1>
-    <span id="overall" class="overall-badge status-unknown">Loading...</span>
+    <h1 id="title">Server-Stat</h1>
+    <span id="overall" class="overall-badge status-unknown">...</span>
   </div>
   <div id="error" class="error-banner"></div>
-  <div class="meta">Last updated: <span id="lastUpdate">-</span></div>
+  <div class="meta"><span id="lastUpdateLabel">Last updated</span>: <span id="lastUpdate">-</span></div>
   <div id="grid" class="grid">
-    <div class="loading">Loading status data...</div>
+    <div class="loading" id="loadingText">Loading status data...</div>
   </div>
 
 <script>
 const COMPONENT_ORDER = ['loadbalancer', 'linux', 'firewall', 'nginx', 'phpfpm', 'mariadb', 'wordpress'];
-const DISPLAY_NAMES = {
-  loadbalancer: 'Load Balancer',
-  linux: 'Linux OS',
-  firewall: 'Firewall',
-  nginx: 'Nginx',
-  phpfpm: 'PHP-FPM',
-  mariadb: 'MariaDB',
-  wordpress: 'WordPress'
+
+// i18n strings (loaded from /api/i18n, with English fallbacks)
+let i18n = {
+  dashboard: {
+    title: 'Server-Stat',
+    last_updated: 'Last updated',
+    loading: 'Loading status data...',
+    no_checks: 'No checks configured',
+    fetch_error: 'Failed to fetch status'
+  },
+  components: {
+    loadbalancer: 'Load Balancer',
+    linux: 'Linux OS',
+    firewall: 'Firewall',
+    nginx: 'Nginx',
+    phpfpm: 'PHP-FPM',
+    mariadb: 'MariaDB',
+    wordpress: 'WordPress'
+  },
+  status: {
+    ok: 'OK',
+    warn: 'Warning',
+    critical: 'Critical',
+    unknown: 'Unknown'
+  }
 };
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
 
 function worstStatus(checks) {
   const priority = { critical: 3, warn: 2, unknown: 1, ok: 0 };
@@ -132,29 +154,49 @@ function worstStatus(checks) {
   return worst;
 }
 
+function statusLabel(status) {
+  return i18n.status[status] || status.toUpperCase();
+}
+
 function renderCard(name, checks) {
   const worst = worstStatus(checks);
+  const displayName = escapeHtml(i18n.components[name] || name);
   let html = `<div class="card">
     <div class="card-header">
-      <span class="card-title">${DISPLAY_NAMES[name] || name}</span>
-      <span class="card-status dot-${worst}"></span>
+      <span class="card-title">${displayName}</span>
+      <span class="card-status dot-${escapeHtml(worst)}"></span>
     </div>`;
 
   for (const check of checks) {
+    const safeStatus = escapeHtml(check.status);
     html += `<div class="check-item">
-      <span class="check-name">${check.component}</span>
-      <span class="check-message msg-${check.status}">${escapeHtml(check.message)}</span>
-      <span class="check-duration">${check.duration}</span>
+      <span class="check-name">${escapeHtml(check.component)}</span>
+      <span class="check-message msg-${safeStatus}">${escapeHtml(check.message)}</span>
+      <span class="check-duration">${escapeHtml(check.duration)}</span>
     </div>`;
   }
   html += '</div>';
   return html;
 }
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+async function loadI18n() {
+  try {
+    const resp = await fetch('/api/i18n');
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.dashboard) i18n.dashboard = { ...i18n.dashboard, ...data.dashboard };
+      if (data.components) i18n.components = { ...i18n.components, ...data.components };
+      if (data.status) i18n.status = { ...i18n.status, ...data.status };
+      if (data.lang) document.documentElement.lang = data.lang;
+    }
+  } catch (e) {
+    // Fallback to English defaults silently
+  }
+  // Apply i18n to static elements
+  document.getElementById('title').textContent = i18n.dashboard.title;
+  document.getElementById('lastUpdateLabel').textContent = i18n.dashboard.last_updated;
+  document.getElementById('loadingText').textContent = i18n.dashboard.loading;
+  document.title = i18n.dashboard.title;
 }
 
 async function fetchStatus() {
@@ -166,7 +208,7 @@ async function fetchStatus() {
     document.getElementById('error').style.display = 'none';
 
     const overall = document.getElementById('overall');
-    overall.textContent = data.overall.toUpperCase();
+    overall.textContent = statusLabel(data.overall);
     overall.className = `overall-badge status-${data.overall}`;
 
     document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
@@ -179,23 +221,25 @@ async function fetchStatus() {
         html += renderCard(name, data.components[name]);
       }
     }
-    // Render any components not in the predefined order
     for (const name of Object.keys(data.components)) {
       if (!COMPONENT_ORDER.includes(name)) {
         html += renderCard(name, data.components[name]);
       }
     }
 
-    grid.innerHTML = html || '<div class="loading">No checks configured</div>';
+    grid.innerHTML = html || `<div class="loading">${escapeHtml(i18n.dashboard.no_checks)}</div>`;
   } catch (err) {
     const errorEl = document.getElementById('error');
-    errorEl.textContent = 'Failed to fetch status: ' + err.message;
+    errorEl.textContent = i18n.dashboard.fetch_error + ': ' + err.message;
     errorEl.style.display = 'block';
   }
 }
 
-fetchStatus();
-setInterval(fetchStatus, 5000);
+// Load translations first, then start polling
+loadI18n().then(() => {
+  fetchStatus();
+  setInterval(fetchStatus, 5000);
+});
 </script>
 </body>
 </html>

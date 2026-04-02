@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -42,10 +43,11 @@ func (m *MultiAlerter) Alert(ctx context.Context, result CheckResult, previousSt
 // LogAlerter logs status changes via slog.
 type LogAlerter struct {
 	Logger *slog.Logger
+	tr     *Translations
 }
 
 func (a *LogAlerter) Alert(_ context.Context, result CheckResult, previousStatus Status) error {
-	a.Logger.Warn("status change",
+	a.Logger.Warn(a.tr.T("alerts.status_change"),
 		"component", result.Component,
 		"status", result.Status.String(),
 		"previous", previousStatus.String(),
@@ -57,13 +59,17 @@ func (a *LogAlerter) Alert(_ context.Context, result CheckResult, previousStatus
 // WebhookAlerter posts JSON to a webhook URL (works with Slack, Discord, etc.).
 type WebhookAlerter struct {
 	URL    string
+	tr     *Translations
 	client *http.Client
 }
 
-func NewWebhookAlerter(url string) *WebhookAlerter {
+func NewWebhookAlerter(url string, tr *Translations) *WebhookAlerter {
 	return &WebhookAlerter{
-		URL:    url,
-		client: &http.Client{Timeout: 10 * time.Second},
+		URL: url,
+		tr:  tr,
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+		},
 	}
 }
 
@@ -106,7 +112,7 @@ func (a *WebhookAlerter) Alert(ctx context.Context, result CheckResult, previous
 	resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("webhook returned HTTP %d", resp.StatusCode)
+		return fmt.Errorf(a.tr.T("alerts.webhook_error", resp.StatusCode))
 	}
 	return nil
 }
@@ -119,31 +125,39 @@ type EmailAlerter struct {
 	To       []string
 	Username string
 	Password string
+	tr       *Translations
+}
+
+// sanitizeHeader removes CR/LF characters to prevent email header injection.
+func sanitizeHeader(s string) string {
+	s = strings.ReplaceAll(s, "\r", "")
+	s = strings.ReplaceAll(s, "\n", "")
+	return s
 }
 
 func (a *EmailAlerter) Alert(_ context.Context, result CheckResult, previousStatus Status) error {
-	subject := fmt.Sprintf("[Server-Stat] %s: %s → %s",
-		result.Component, previousStatus.String(), result.Status.String())
+	subject := sanitizeHeader(a.tr.T("alerts.email_subject",
+		result.Component, previousStatus.String(), result.Status.String()))
 
-	body := fmt.Sprintf("Component: %s\nStatus: %s (was %s)\nMessage: %s\nTime: %s\n",
-		result.Component,
-		result.Status.String(),
-		previousStatus.String(),
-		result.Message,
-		result.CheckedAt.Format(time.RFC3339),
-	)
+	body := a.tr.T("alerts.email_component", result.Component) + "\n" +
+		a.tr.T("alerts.email_status", result.Status.String(), previousStatus.String()) + "\n" +
+		a.tr.T("alerts.email_message", result.Message) + "\n" +
+		a.tr.T("alerts.email_time", result.CheckedAt.Format(time.RFC3339)) + "\n"
 
 	if len(result.Details) > 0 {
-		body += "\nDetails:\n"
+		body += "\n" + a.tr.T("alerts.email_details") + "\n"
 		for k, v := range result.Details {
 			body += fmt.Sprintf("  %s: %s\n", k, v)
 		}
 	}
 
-	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s",
-		a.From,
-		strings.Join(a.To, ", "),
-		subject,
+	// MIME-encode subject for UTF-8 support (needed for Korean, etc.)
+	encodedSubject := "=?UTF-8?B?" + encodeBase64(subject) + "?="
+
+	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
+		sanitizeHeader(a.From),
+		sanitizeHeader(strings.Join(a.To, ", ")),
+		encodedSubject,
 		body,
 	)
 
@@ -154,4 +168,8 @@ func (a *EmailAlerter) Alert(_ context.Context, result CheckResult, previousStat
 	}
 
 	return smtp.SendMail(addr, auth, a.From, a.To, []byte(msg))
+}
+
+func encodeBase64(s string) string {
+	return base64.StdEncoding.EncodeToString([]byte(s))
 }

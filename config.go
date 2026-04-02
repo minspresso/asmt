@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -9,6 +12,7 @@ import (
 
 type Config struct {
 	Server        ServerConfig        `yaml:"server"`
+	Language      string              `yaml:"language"`
 	CheckInterval Duration            `yaml:"check_interval"`
 	Checks        ChecksConfig        `yaml:"checks"`
 	Healthz       HealthzConfig       `yaml:"healthz"`
@@ -117,14 +121,25 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// expandEnv replaces ${VAR} and $VAR references in a string with
+// environment variable values. This allows sensitive values like
+// database passwords to be kept out of config files.
+func expandEnv(s string) string {
+	return os.ExpandEnv(s)
+}
+
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
+	// Expand environment variables before parsing
+	expanded := expandEnv(string(data))
+
 	cfg := &Config{
 		Server:        ServerConfig{Address: ":8080"},
+		Language:      "en",
 		CheckInterval: Duration{30 * time.Second},
 		Checks: ChecksConfig{
 			LoadBalancer: LBCheckConfig{Enabled: true},
@@ -132,7 +147,7 @@ func LoadConfig(path string) (*Config, error) {
 			Firewall:     FirewallCheckConfig{Enabled: true, Ports: []int{80, 443, 3306}},
 			Nginx:        NginxCheckConfig{Enabled: true, PIDFile: "/run/nginx.pid"},
 			PHPFPM:       PHPFPMCheckConfig{Enabled: true, Socket: "/run/php/php-fpm.sock"},
-			MariaDB:      MariaDBCheckConfig{Enabled: true, DSN: "monitor:password@tcp(127.0.0.1:3306)/mysql"},
+			MariaDB:      MariaDBCheckConfig{Enabled: true},
 			WordPress:    WordPressCheckConfig{Enabled: true, URL: "http://localhost", ExpectBody: "</html>"},
 		},
 		Healthz: HealthzConfig{CriticalChecks: []string{"nginx", "phpfpm", "mariadb"}},
@@ -141,8 +156,27 @@ func LoadConfig(path string) (*Config, error) {
 		},
 	}
 
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	if err := yaml.Unmarshal([]byte(expanded), cfg); err != nil {
 		return nil, err
+	}
+
+	// Validate: check interval must be positive
+	if cfg.CheckInterval.Duration <= 0 {
+		cfg.CheckInterval.Duration = 30 * time.Second
+	}
+
+	// Validate: LBIP must be a bare IP or host:port, not a full URL
+	if ip := cfg.Checks.LoadBalancer.LBIP; ip != "" {
+		if strings.Contains(ip, "/") || strings.Contains(ip, "?") {
+			return nil, fmt.Errorf("lb_ip must be an IP or host:port, not a URL: %q", ip)
+		}
+	}
+
+	// Warn about sensitive defaults
+	if cfg.Checks.MariaDB.Enabled && cfg.Checks.MariaDB.DSN != "" {
+		if strings.Contains(cfg.Checks.MariaDB.DSN, "password@") {
+			slog.Warn("MariaDB DSN appears to contain a default password. Use environment variables: dsn: ${MARIADB_DSN}")
+		}
 	}
 
 	return cfg, nil

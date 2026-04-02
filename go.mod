@@ -7,4 +7,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require filippo.io/edwards25519 v1.1.0 // indirect
+require (
+	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/lib/pq v1.12.2 // indirect
+)

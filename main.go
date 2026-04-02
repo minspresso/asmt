@@ -44,6 +44,7 @@ func main() {
 	// Build checkers
 	var checkers []Checker
 	var mariadbChecker *MariaDBChecker
+	var postgresChecker *PostgreSQLChecker
 
 	if cfg.Checks.LoadBalancer.Enabled {
 		checkers = append(checkers, NewLoadBalancerChecker(cfg.Checks.LoadBalancer.LBIP, tr))
@@ -110,6 +111,30 @@ func main() {
 			cfg.Checks.WordPress.TLSSkipVerify,
 			tr,
 		))
+	}
+
+	if cfg.Checks.Redis.Enabled {
+		checkers = append(checkers, NewRedisChecker(
+			cfg.Checks.Redis.Name,
+			cfg.Checks.Redis.Addr,
+			cfg.Checks.Redis.Password,
+			tr,
+		))
+	}
+
+	if cfg.Checks.PostgreSQL.Enabled && cfg.Checks.PostgreSQL.DSN != "" {
+		postgresChecker = NewPostgreSQLChecker(
+			cfg.Checks.PostgreSQL.Name,
+			cfg.Checks.PostgreSQL.DSN,
+			tr,
+		)
+		checkers = append(checkers, postgresChecker)
+	}
+
+	for _, ep := range cfg.Checks.HTTPEndpoints {
+		if ep.Enabled && ep.URL != "" && ep.Name != "" {
+			checkers = append(checkers, NewHTTPEndpointChecker(ep, tr))
+		}
 	}
 
 	// Build alerters
@@ -192,6 +217,9 @@ func main() {
 	// Clean up persistent connections
 	if mariadbChecker != nil {
 		mariadbChecker.Close()
+	}
+	if postgresChecker != nil {
+		postgresChecker.Close()
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -31,13 +31,16 @@ type ServerConfig struct {
 }
 
 type ChecksConfig struct {
-	LoadBalancer LBCheckConfig        `yaml:"loadbalancer"`
-	Linux        LinuxCheckConfig     `yaml:"linux"`
-	Firewall     FirewallCheckConfig  `yaml:"firewall"`
-	HTTPServer   HTTPServerCheckConfig `yaml:"http_server"`
-	PHPFPM       PHPFPMCheckConfig    `yaml:"phpfpm"`
-	MariaDB      MariaDBCheckConfig   `yaml:"mariadb"`
-	WordPress    WordPressCheckConfig `yaml:"wordpress"`
+	LoadBalancer  LBCheckConfig         `yaml:"loadbalancer"`
+	Linux         LinuxCheckConfig      `yaml:"linux"`
+	Firewall      FirewallCheckConfig   `yaml:"firewall"`
+	HTTPServer    HTTPServerCheckConfig `yaml:"http_server"`
+	PHPFPM        PHPFPMCheckConfig     `yaml:"phpfpm"`
+	MariaDB       MariaDBCheckConfig    `yaml:"mariadb"`
+	WordPress     WordPressCheckConfig  `yaml:"wordpress"`
+	Redis         RedisCheckConfig      `yaml:"redis"`
+	PostgreSQL    PostgreSQLCheckConfig `yaml:"postgresql"`
+	HTTPEndpoints []HTTPEndpointConfig  `yaml:"http_endpoints"`
 }
 
 type HTTPServerCheckConfig struct {
@@ -80,6 +83,33 @@ type WordPressCheckConfig struct {
 	URL           string `yaml:"url"`
 	ExpectBody    string `yaml:"expect_body"`
 	TLSSkipVerify bool   `yaml:"tls_skip_verify"` // default false; set true only for self-signed certs
+}
+
+type RedisCheckConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	Name     string `yaml:"name"`     // display name; defaults to "redis"
+	Addr     string `yaml:"addr"`     // host:port; defaults to "127.0.0.1:6379"
+	Password string `yaml:"password"` // use ${REDIS_PASSWORD} — never hardcode
+}
+
+type PostgreSQLCheckConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Name    string `yaml:"name"` // display name; defaults to "postgresql"
+	DSN     string `yaml:"dsn"`  // postgres://user:pass@host/db?sslmode=disable — use ${POSTGRES_DSN}
+}
+
+// HTTPEndpointConfig describes a single custom HTTP health probe.
+// Multiple entries are supported under checks.http_endpoints.
+type HTTPEndpointConfig struct {
+	Enabled       bool              `yaml:"enabled"`
+	Name          string            `yaml:"name"`           // unique name; used as component key
+	URL           string            `yaml:"url"`
+	Method        string            `yaml:"method"`         // GET by default
+	Headers       map[string]string `yaml:"headers"`
+	ExpectStatus  []int             `yaml:"expect_status"`  // default [200]
+	ExpectBody    string            `yaml:"expect_body"`    // optional substring check
+	TLSSkipVerify bool              `yaml:"tls_skip_verify"`
+	Timeout       Duration          `yaml:"timeout"`        // default 10s
 }
 
 type HealthzConfig struct {

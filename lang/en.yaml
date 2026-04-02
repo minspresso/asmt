@@ -27,6 +27,8 @@ components:
   phpfpm: "PHP-FPM"
   mariadb: "MariaDB"
   wordpress: "WordPress"
+  redis: "Redis"
+  postgresql: "PostgreSQL"
 
 checks:
   # Linux - Disk
@@ -99,6 +101,30 @@ checks:
   wordpress_api_unreachable: "REST API unreachable: %s"
   wordpress_api_error: "REST API returned HTTP %d"
   wordpress_api_ok: "REST API HTTP %d"
+
+  # Redis
+  redis_conn_failed: "cannot connect to Redis %s: %s"
+  redis_auth_failed: "Redis AUTH failed: %s"
+  redis_pong_ok: "Redis %s responding"
+  redis_unexpected: "unexpected response: %s"
+  redis_memory: "memory used: %s"
+  redis_clients: "%s connected clients"
+
+  # PostgreSQL
+  postgres_open_error: "cannot open connection: %s"
+  postgres_ping_failed: "ping failed: %s"
+  postgres_connected: "connected successfully"
+  postgres_query_failed: "query failed: %s"
+  postgres_query_ok: "query executed successfully"
+  postgres_connections: "%d active connections"
+
+  # Custom HTTP endpoints
+  http_request_error: "request error: %s"
+  http_unreachable: "endpoint unreachable: %s"
+  http_unexpected_status: "unexpected HTTP %d"
+  http_body_not_found: "HTTP %d but expected content not found"
+  http_body_read_error: "cannot read response body: %s"
+  http_ok: "HTTP %d"
 
   # Load Balancer
   lb_metadata_request_error: "cannot create metadata request: %s"

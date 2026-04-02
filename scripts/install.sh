@@ -44,6 +44,24 @@ detect_http_server() {
     fi
 }
 
+detect_mariadb() {
+    if command -v mysql &>/dev/null || command -v mariadb &>/dev/null; then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+
+detect_phpfpm() {
+    if pgrep -x "php-fpm" &>/dev/null || pgrep -x "php-fpm8" &>/dev/null || \
+       pgrep -x "php-fpm7" &>/dev/null || pgrep -x "php8.3-fpm" &>/dev/null || \
+       find /run/php -name "*.sock" 2>/dev/null | grep -q .; then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+
 detect_init() {
     if command -v systemctl &>/dev/null && systemctl --version &>/dev/null 2>&1; then
         echo "systemd"
@@ -60,10 +78,14 @@ detect_init() {
 DISTRO=$(detect_distro)
 HTTP_SERVER=$(detect_http_server)
 INIT_SYSTEM=$(detect_init)
+HAS_MARIADB=$(detect_mariadb)
+HAS_PHPFPM=$(detect_phpfpm)
 
-info "Detected distro: ${DISTRO}"
+info "Detected distro:      ${DISTRO}"
 info "Detected HTTP server: ${HTTP_SERVER:-none}"
 info "Detected init system: ${INIT_SYSTEM}"
+info "Detected MariaDB:     ${HAS_MARIADB}"
+info "Detected PHP-FPM:     ${HAS_PHPFPM}"
 
 # --- Locate or build binary ---
 if [ -f "./${BINARY_NAME}" ]; then
@@ -100,6 +122,14 @@ if [ ! -f "${INSTALL_DIR}/${CONFIG_FILE}" ]; then
 
     HTTP_TYPE="${HTTP_SERVER:-auto}"
 
+    # Build critical_checks dynamically from what is actually present
+    CRITICAL_CHECKS=""
+    [ -n "${HTTP_SERVER}" ] && CRITICAL_CHECKS="${CRITICAL_CHECKS}\"${HTTP_TYPE}\", "
+    [ "${HAS_PHPFPM}" = "true" ] && CRITICAL_CHECKS="${CRITICAL_CHECKS}\"phpfpm\", "
+    [ "${HAS_MARIADB}" = "true" ] && CRITICAL_CHECKS="${CRITICAL_CHECKS}\"mariadb\", "
+    # Strip trailing comma+space
+    CRITICAL_CHECKS="${CRITICAL_CHECKS%, }"
+
     cat > "${INSTALL_DIR}/${CONFIG_FILE}" << YAML
 server:
   address: "127.0.0.1:8080"
@@ -124,17 +154,17 @@ checks:
     ports: [80, 443, 3306]
 
   http_server:
-    enabled: true
+    enabled: $([ -n "${HTTP_SERVER}" ] && echo "true" || echo "false")
     type: "${HTTP_TYPE}"
     pid_file: ""
 
   phpfpm:
-    enabled: true
+    enabled: ${HAS_PHPFPM}
     socket: ""
     port: 0
 
   mariadb:
-    enabled: true
+    enabled: ${HAS_MARIADB}
     dsn: "\${MARIADB_DSN}"
 
   wordpress:
@@ -148,7 +178,7 @@ logs:
   files: []
 
 healthz:
-  critical_checks: ["${HTTP_TYPE}", "phpfpm", "mariadb"]
+  critical_checks: [${CRITICAL_CHECKS}]
 
 alerts:
   log:
@@ -188,7 +218,7 @@ WorkingDirectory=${INSTALL_DIR}
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=${INSTALL_DIR}
+ReadWritePaths=${INSTALL_DIR} /run
 PrivateTmp=true
 
 [Install]

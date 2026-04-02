@@ -96,11 +96,26 @@ func (c *NginxChecker) checkProcess() CheckResult {
 func (c *NginxChecker) checkConfig(ctx context.Context) CheckResult {
 	cmd := exec.CommandContext(ctx, "nginx", "-t")
 	output, err := cmd.CombinedOutput()
+	out := strings.TrimSpace(string(output))
+
 	if err != nil {
+		// nginx -t can fail with a non-zero exit code for reasons unrelated to
+		// config syntax — most commonly it cannot write the PID file when running
+		// inside a systemd sandbox (ProtectSystem=strict, read-only /run).
+		// If the output explicitly says the syntax is OK we treat it as a warning
+		// rather than critical so a sandboxed deployment doesn't show a false alarm.
+		if strings.Contains(out, "syntax is ok") {
+			return CheckResult{
+				Component: "nginx-config",
+				Status:    StatusWarn,
+				Message:   c.tr.T("checks.nginx_config_valid") + " (pid file write blocked by sandbox)",
+				CheckedAt: time.Now(),
+			}
+		}
 		return CheckResult{
 			Component: "nginx-config",
 			Status:    StatusCritical,
-			Message:   c.tr.T("checks.nginx_config_failed", strings.TrimSpace(string(output))),
+			Message:   c.tr.T("checks.nginx_config_failed", out),
 			CheckedAt: time.Now(),
 		}
 	}

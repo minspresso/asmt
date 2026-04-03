@@ -17,11 +17,17 @@ type HistoryDay struct {
 	Status string `json:"status"` // "ok", "warn", "critical", "unknown"
 }
 
+// migrationThreshold is the max outage duration treated as an intentional
+// migration/config change rather than a real incident. If a component goes
+// critical then recovers within this window, today's history is reset to ok.
+const migrationThreshold = 10 * time.Minute
+
 type Scheduler struct {
 	mu             sync.RWMutex
 	checkers       []Checker
 	results        map[string][]CheckResult
 	previousStatus map[string]Status
+	criticalSince  map[string]time.Time // when a component first went critical today
 	history        map[string][]HistoryDay // component -> up to 7 days, oldest first
 	historyStore   *HistoryStore
 	metrics        *MetricsBuffer
@@ -41,6 +47,7 @@ func NewScheduler(checkers []Checker, interval time.Duration, alerter Alerter, l
 		checkers:       checkers,
 		results:        make(map[string][]CheckResult),
 		previousStatus: make(map[string]Status),
+		criticalSince:  make(map[string]time.Time),
 		history:        make(map[string][]HistoryDay),
 		historyStore:   store,
 		metrics:        NewMetricsBuffer(store),
@@ -72,6 +79,22 @@ func historyPriority(s string) int {
 		return 1
 	default:
 		return 0
+	}
+}
+
+// downgradeHistory resets today's history for a component back to "ok".
+// Called when a critical → ok transition happens within migrationThreshold,
+// indicating an intentional migration/config change rather than a real outage.
+// Must be called with s.mu held for writing.
+func (s *Scheduler) downgradeHistory(component string) {
+	today := time.Now().UTC().Format("2006-01-02")
+	days := s.history[component]
+	for i := range days {
+		if days[i].Date == today && days[i].Status == "critical" {
+			days[i].Status = "ok"
+			s.history[component] = days
+			return
+		}
 	}
 }
 
@@ -196,6 +219,13 @@ func (s *Scheduler) runAll(ctx context.Context) {
 		for _, r := range cr.results {
 			s.updateHistory(r.Component, r.Status)
 
+			// Track when a component first goes critical (for migration detection).
+			if r.Status == StatusCritical {
+				if _, alreadyTracked := s.criticalSince[r.Component]; !alreadyTracked {
+					s.criticalSince[r.Component] = time.Now()
+				}
+			}
+
 			prevStatus, exists := s.previousStatus[r.Component]
 			if !exists {
 				s.previousStatus[r.Component] = r.Status
@@ -206,6 +236,18 @@ func (s *Scheduler) runAll(ctx context.Context) {
 			}
 
 			if r.Status != prevStatus {
+				// If recovering from critical within the migration threshold,
+				// downgrade today's history to ok (intentional migration/config change).
+				if prevStatus == StatusCritical && r.Status == StatusOK {
+					if since, ok := s.criticalSince[r.Component]; ok {
+						if time.Since(since) <= migrationThreshold {
+							s.downgradeHistory(r.Component)
+						}
+					}
+				}
+				if r.Status != StatusCritical {
+					delete(s.criticalSince, r.Component)
+				}
 				alerts = append(alerts, pendingAlert{r, prevStatus})
 				s.previousStatus[r.Component] = r.Status
 			}

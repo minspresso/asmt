@@ -267,12 +267,16 @@
     pointer-events: auto;
     border-color: #58a6ff55;
   }
-  .tt-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
-  .tt-time { color: #8b949e; font-size: 11px; font-family: 'SFMono-Regular', Consolas, monospace; }
-  .tt-close { background: none; border: none; color: #8b949e; font-size: 22px; cursor: pointer; padding: 0 0 0 12px; line-height: 1; min-width: 32px; min-height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
+  .tt-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; }
+  .tt-time { color: #8b949e; font-size: 11px; font-family: 'SFMono-Regular', Consolas, monospace; flex: 1; }
+  .tt-close { background: none; border: none; color: #8b949e; font-size: 20px; line-height: 1; cursor: pointer; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 4px; flex-shrink: 0; padding: 0; }
   .tt-close:hover { color: #e1e4e8; background: #30363d; }
   .tt-row  { display: flex; align-items: center; gap: 7px; margin: 4px 0; color: #e1e4e8; }
   .tt-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .tt-pin-hint {
+    margin-top: 10px; width: 100%; text-align: center;
+    color: #484f58; font-size: 11px; padding: 4px 0;
+  }
   .tt-copy-btn {
     margin-top: 10px; width: 100%;
     background: #21262d; border: 1px solid #30363d;
@@ -319,7 +323,8 @@
         </div>
         <div class="tt-row"><span class="tt-dot" style="background:#58a6ff"></span><span id="ttMem">Memory: --</span></div>
         <div class="tt-row"><span class="tt-dot" style="background:#3fb950"></span><span id="ttLoad">Load: --</span></div>
-        <button class="tt-copy-btn" id="ttCopyBtn">Copy</button>
+        <div class="tt-pin-hint" id="ttPinHint">Click graph to pin</div>
+        <button class="tt-copy-btn" id="ttCopyBtn" style="display:none">Copy</button>
       </div>
     </div>
     <div class="metrics-range" id="metricsRange"></div>
@@ -751,6 +756,8 @@ function gDismissTooltip() {
   gPinned = false;
   tooltip.classList.remove('tt-pinned');
   tooltip.style.display = 'none';
+  document.getElementById('ttPinHint').style.display = '';
+  document.getElementById('ttCopyBtn').style.display = 'none';
   gHoverPoint = null;
   gScheduleDraw();
 }
@@ -845,6 +852,8 @@ function gInitEvents() {
     if (!gHoverPoint) return;
     gPinned = true;
     tooltip.classList.add('tt-pinned');
+    document.getElementById('ttPinHint').style.display = 'none';
+    document.getElementById('ttCopyBtn').style.display = '';
   });
 
   // Scroll → zoom around cursor

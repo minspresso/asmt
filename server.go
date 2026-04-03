@@ -36,6 +36,7 @@ func NewServer(scheduler *Scheduler, logWatcher *LogWatcher, config *Config, log
 type statusResponse struct {
 	Overall    string                       `json:"overall"`
 	Components map[string][]checkResultJSON `json:"components"`
+	History    map[string][]HistoryDay      `json:"history"`
 	CheckedAt  time.Time                    `json:"checked_at"`
 }
 
@@ -85,6 +86,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	resp := statusResponse{
 		Overall:    s.scheduler.OverallStatus().String(),
 		Components: make(map[string][]checkResultJSON),
+		History:    s.scheduler.GetHistory(),
 		CheckedAt:  time.Now(),
 	}
 

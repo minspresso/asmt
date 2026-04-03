@@ -150,6 +150,33 @@
     color: #f85149;
     display: none;
   }
+  .history-bar {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #21262d;
+  }
+  .history-label {
+    font-size: 11px;
+    color: #484f58;
+    margin-bottom: 5px;
+  }
+  .history-days {
+    display: flex;
+    gap: 3px;
+  }
+  .history-day {
+    flex: 1;
+    height: 18px;
+    border-radius: 3px;
+    cursor: default;
+    transition: opacity 0.15s;
+    position: relative;
+  }
+  .history-day:hover { opacity: 0.75; }
+  .hday-ok       { background: #3fb950; }
+  .hday-warn     { background: #d29922; }
+  .hday-critical { background: #f85149; }
+  .hday-unknown  { background: #21262d; }
 </style>
 </head>
 <body>
@@ -222,7 +249,41 @@ function statusLabel(status) {
   return i18n.status[status] || status.toUpperCase();
 }
 
-function renderCard(name, checks) {
+function renderHistoryBar(checks, history) {
+  // Collect all component names for this card, look up their history days
+  const componentNames = checks.map(c => c.component);
+  // Merge: for each day slot, take the worst status across all components in this card
+  let merged = null;
+  for (const name of componentNames) {
+    const days = history[name];
+    if (!days) continue;
+    if (!merged) {
+      merged = days.map(d => ({ ...d }));
+    } else {
+      for (let i = 0; i < merged.length; i++) {
+        const priority = { critical: 3, warn: 2, ok: 1, unknown: 0 };
+        if ((priority[days[i].status] || 0) > (priority[merged[i].status] || 0)) {
+          merged[i].status = days[i].status;
+        }
+      }
+    }
+  }
+  if (!merged) return '';
+
+  const dayLabels = { ok: 'OK', warn: 'Warning', critical: 'Critical', unknown: 'No data' };
+  let bars = merged.map(d => {
+    const safeStatus = escapeHtml(d.status);
+    const label = escapeHtml(d.date + ': ' + (dayLabels[d.status] || d.status));
+    return `<div class="history-day hday-${safeStatus}" title="${label}"></div>`;
+  }).join('');
+
+  return `<div class="history-bar">
+    <div class="history-label">7-day history</div>
+    <div class="history-days">${bars}</div>
+  </div>`;
+}
+
+function renderCard(name, checks, history) {
   const worst = worstStatus(checks);
   const displayName = escapeHtml(i18n.components[name] || name);
   let html = `<div class="card">
@@ -239,6 +300,8 @@ function renderCard(name, checks) {
       <span class="check-duration">${escapeHtml(check.duration)}</span>
     </div>`;
   }
+
+  html += renderHistoryBar(checks, history || {});
   html += '</div>';
   return html;
 }
@@ -317,14 +380,15 @@ async function fetchStatus() {
     const grid = document.getElementById('grid');
     let html = '';
 
+    const history = data.history || {};
     for (const name of COMPONENT_ORDER) {
       if (data.components[name]) {
-        html += renderCard(name, data.components[name]);
+        html += renderCard(name, data.components[name], history);
       }
     }
     for (const name of Object.keys(data.components)) {
       if (!COMPONENT_ORDER.includes(name)) {
-        html += renderCard(name, data.components[name]);
+        html += renderCard(name, data.components[name], history);
       }
     }
 

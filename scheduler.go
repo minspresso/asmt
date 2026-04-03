@@ -10,11 +10,18 @@ import (
 	"time"
 )
 
+// HistoryDay records the worst status seen for a component on a given UTC date.
+type HistoryDay struct {
+	Date   string `json:"date"`   // "2006-01-02"
+	Status string `json:"status"` // "ok", "warn", "critical", "unknown"
+}
+
 type Scheduler struct {
 	mu             sync.RWMutex
 	checkers       []Checker
 	results        map[string][]CheckResult
 	previousStatus map[string]Status
+	history        map[string][]HistoryDay // component -> up to 7 days, oldest first
 	interval       time.Duration
 	alerter        Alerter
 	logger         *slog.Logger
@@ -30,11 +37,82 @@ func NewScheduler(checkers []Checker, interval time.Duration, alerter Alerter, l
 		checkers:       checkers,
 		results:        make(map[string][]CheckResult),
 		previousStatus: make(map[string]Status),
+		history:        make(map[string][]HistoryDay),
 		interval:       interval,
 		alerter:        alerter,
 		logger:         logger,
 		tr:             tr,
 	}
+}
+
+// historyPriority ranks statuses for worst-of-day tracking.
+// Unknown means no data and loses to everything.
+func historyPriority(s string) int {
+	switch s {
+	case "critical":
+		return 3
+	case "warn":
+		return 2
+	case "ok":
+		return 1
+	default:
+		return 0
+	}
+}
+
+// updateHistory records the worst status seen for a component today.
+// Must be called with s.mu held for writing.
+func (s *Scheduler) updateHistory(component string, status Status) {
+	if status == StatusUnknown {
+		return
+	}
+	today := time.Now().UTC().Format("2006-01-02")
+	days := s.history[component]
+
+	if len(days) == 0 || days[len(days)-1].Date != today {
+		days = append(days, HistoryDay{Date: today, Status: "unknown"})
+		if len(days) > 7 {
+			days = days[len(days)-7:]
+		}
+	}
+
+	incoming := status.String()
+	if historyPriority(incoming) > historyPriority(days[len(days)-1].Status) {
+		days[len(days)-1].Status = incoming
+	}
+	s.history[component] = days
+}
+
+// GetHistory returns a 7-day history for every component, padded with
+// "unknown" for any days that have no data yet.
+func (s *Scheduler) GetHistory() map[string][]HistoryDay {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Pre-build the 7-day date window (oldest → newest).
+	dates := make([]string, 7)
+	now := time.Now().UTC()
+	for i := 0; i < 7; i++ {
+		dates[i] = now.AddDate(0, 0, -(6 - i)).Format("2006-01-02")
+	}
+
+	result := make(map[string][]HistoryDay, len(s.history))
+	for component, recorded := range s.history {
+		padded := make([]HistoryDay, 7)
+		for i, d := range dates {
+			padded[i] = HistoryDay{Date: d, Status: "unknown"}
+		}
+		for _, day := range recorded {
+			for i, p := range padded {
+				if p.Date == day.Date {
+					padded[i].Status = day.Status
+					break
+				}
+			}
+		}
+		result[component] = padded
+	}
+	return result
 }
 
 func (s *Scheduler) Start(ctx context.Context) {
@@ -101,6 +179,8 @@ func (s *Scheduler) runAll(ctx context.Context) {
 		s.results[cr.name] = cr.results
 
 		for _, r := range cr.results {
+			s.updateHistory(r.Component, r.Status)
+
 			prevStatus, exists := s.previousStatus[r.Component]
 			if !exists {
 				s.previousStatus[r.Component] = r.Status

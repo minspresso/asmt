@@ -206,14 +206,31 @@
     margin-right: 4px;
     vertical-align: middle;
   }
+  .metrics-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .metrics-range-btn {
+    background: none;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #8b949e;
+    font-size: 12px;
+    padding: 3px 8px;
+    cursor: pointer;
+  }
+  .metrics-range-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+  .metrics-range-btn.active { border-color: #58a6ff; color: #58a6ff; background: #1a2a3f; }
   .metrics-refresh {
     background: none;
     border: 1px solid #30363d;
     border-radius: 6px;
     color: #8b949e;
     font-size: 12px;
-    padding: 4px 10px;
+    padding: 3px 8px;
     cursor: pointer;
+    margin-left: 4px;
   }
   .metrics-refresh:hover { border-color: #58a6ff; color: #58a6ff; }
   .metrics-svg-wrap {
@@ -239,17 +256,24 @@
   </div>
   <div class="metrics-section" id="metricsSection" style="display:none">
     <div class="metrics-header">
-      <span class="metrics-title">Resource Usage (7 days)</span>
-      <div style="display:flex;align-items:center;gap:12px">
+      <span class="metrics-title">Resource Usage</span>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <div class="metrics-legend">
           <span><span class="legend-dot" style="background:#58a6ff"></span>Memory %</span>
           <span><span class="legend-dot" style="background:#3fb950"></span>Load %</span>
         </div>
-        <button class="metrics-refresh" id="metricsRefresh" onclick="fetchMetrics()">&#8635; Refresh</button>
+        <div class="metrics-controls">
+          <button class="metrics-range-btn" data-seconds="900">15m</button>
+          <button class="metrics-range-btn" data-seconds="1800">30m</button>
+          <button class="metrics-range-btn" data-seconds="86400">1d</button>
+          <button class="metrics-range-btn" data-seconds="259200">3d</button>
+          <button class="metrics-range-btn active" data-seconds="604800">7d</button>
+          <button class="metrics-refresh" id="metricsRefresh" onclick="fetchMetrics()">&#8635;</button>
+        </div>
       </div>
     </div>
     <div class="metrics-svg-wrap" id="metricsSvgWrap">
-      <div class="metrics-empty" id="metricsEmpty">No data yet — check back after the first interval.</div>
+      <div class="metrics-empty">No data yet — check back after the first interval.</div>
     </div>
     <div class="metrics-range" id="metricsRange"></div>
   </div>
@@ -513,41 +537,61 @@ function buildSparkline(points, numCPUs) {
   </svg>`;
 }
 
+let allMetricPoints = [];
+let metricsNumCPUs = 1;
+let activeRangeSeconds = 604800; // default 7d
+
+function renderMetrics() {
+  const wrap  = document.getElementById('metricsSvgWrap');
+  const rangeEl = document.getElementById('metricsRange');
+
+  const cutoff = Math.floor(Date.now() / 1000) - activeRangeSeconds;
+  const pts = allMetricPoints.filter(p => p.t >= cutoff);
+
+  if (pts.length === 0) {
+    wrap.innerHTML = '<div class="metrics-empty">No data in this range yet.</div>';
+    rangeEl.textContent = '';
+    return;
+  }
+
+  wrap.innerHTML = buildSparkline(pts, metricsNumCPUs) || '';
+
+  const oldest = new Date(pts[0].t * 1000);
+  const newest = new Date(pts[pts.length - 1].t * 1000);
+  rangeEl.textContent = oldest.toLocaleString() + ' → ' + newest.toLocaleString() + ' (' + pts.length + ' readings)';
+}
+
+function setActiveRange(seconds) {
+  activeRangeSeconds = seconds;
+  document.querySelectorAll('.metrics-range-btn').forEach(btn => {
+    btn.classList.toggle('active', Number(btn.dataset.seconds) === seconds);
+  });
+  renderMetrics();
+}
+
 async function fetchMetrics() {
   const btn = document.getElementById('metricsRefresh');
-  if (btn) btn.textContent = '⟳ Loading…';
+  if (btn) btn.textContent = '⟳';
   try {
     const resp = await fetch('/api/metrics');
     if (!resp.ok) return;
     const data = await resp.json();
-    const points = data.points || [];
-    const numCPUs = data.num_cpus || 1;
+    allMetricPoints = data.points || [];
+    metricsNumCPUs = data.num_cpus || 1;
 
-    const section = document.getElementById('metricsSection');
-    section.style.display = '';
-
-    const wrap  = document.getElementById('metricsSvgWrap');
-    const empty = document.getElementById('metricsEmpty');
-    const range = document.getElementById('metricsRange');
-
-    if (points.length === 0) {
-      wrap.innerHTML = '<div class="metrics-empty">No data yet — check back after the first interval.</div>';
-      range.textContent = '';
-      return;
-    }
-
-    const svg = buildSparkline(points, numCPUs);
-    wrap.innerHTML = svg || '';
-
-    const oldest = new Date(points[0].t * 1000);
-    const newest = new Date(points[points.length - 1].t * 1000);
-    range.textContent = oldest.toLocaleString() + ' → ' + newest.toLocaleString() + ' (' + points.length + ' readings)';
+    document.getElementById('metricsSection').style.display = '';
+    renderMetrics();
   } catch (e) {
     // Silently ignore
   } finally {
-    if (btn) btn.textContent = '↻ Refresh';
+    if (btn) btn.textContent = '↻';
   }
 }
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.metrics-range-btn');
+  if (btn) setActiveRange(Number(btn.dataset.seconds));
+});
 
 // Load translations first, then start polling
 loadI18n().then(() => {

@@ -109,8 +109,9 @@ func (mb *MetricsBuffer) saveToday(points []MetricPoint) {
 	tmp := path + ".tmp"
 
 	data, err := json.Marshal(struct {
-		Points []MetricPoint `json:"points"`
-	}{Points: points})
+		MachineID string        `json:"machine_id"`
+		Points    []MetricPoint `json:"points"`
+	}{MachineID: mb.store.machineID, Points: points})
 	if err != nil {
 		return
 	}
@@ -143,9 +144,15 @@ func (mb *MetricsBuffer) load() {
 			continue
 		}
 		var f struct {
-			Points []MetricPoint `json:"points"`
+			MachineID string        `json:"machine_id"`
+			Points    []MetricPoint `json:"points"`
 		}
 		if err := json.Unmarshal(raw, &f); err != nil {
+			continue
+		}
+		// Skip files written by a different machine (e.g. data copied from old VM).
+		// Files without a machine_id (written before this fix) are also skipped.
+		if f.MachineID != mb.store.machineID {
 			continue
 		}
 		for _, p := range f.Points {

@@ -870,13 +870,15 @@ function gInitEvents() {
     gDragStartX  = e.clientX;
     gDragStartVS = gViewStart;
     gDragStartVE = gViewEnd;
-    canvas.style.cursor = 'grabbing';
-    tooltip.style.display = 'none';
-    gHoverPoint = null;
   });
   window.addEventListener('mousemove', e => {
     if (!gDragging) return;
-    gDragMoved = true;
+    if (!gDragMoved) {
+      // First actual movement — now we know it's a drag, not a click
+      gDragMoved = true;
+      if (!gPinned) { tooltip.style.display = 'none'; gHoverPoint = null; }
+      canvas.style.cursor = 'grabbing';
+    }
     const r     = wrap.getBoundingClientRect();
     const plotW = r.width - GC.ML - GC.MR;
     const dtS   = -(e.clientX - gDragStartX) / plotW * (gDragStartVE - gDragStartVS);

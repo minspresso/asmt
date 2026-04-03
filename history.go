@@ -5,6 +5,8 @@ package main
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -36,15 +38,41 @@ func NewHistoryStore(configPath string) *HistoryStore {
 	}
 }
 
-// readMachineID returns the system's unique machine identifier.
-// Falls back to hostname if /etc/machine-id is unavailable.
+// readMachineID returns a unique identifier for this VM instance.
+//
+// Priority:
+//  1. GCP instance ID (changes when a new VM is created, even if the same
+//     disk is reattached — exactly what we need to detect VM migration)
+//  2. /etc/machine-id (lives on disk, unchanged across reboots but also
+//     unchanged when the disk is moved to a new VM — not sufficient alone)
+//  3. hostname as a last resort
 func readMachineID() string {
-	data, err := os.ReadFile("/etc/machine-id")
-	if err != nil {
-		h, _ := os.Hostname()
-		return h
+	// Try GCP metadata server first (3-second timeout, non-blocking on non-GCP).
+	client := &http.Client{Timeout: 3 * time.Second}
+	req, err := http.NewRequest("GET",
+		"http://metadata.google.internal/computeMetadata/v1/instance/id", nil)
+	if err == nil {
+		req.Header.Set("Metadata-Flavor", "Google")
+		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 64))
+			if id := strings.TrimSpace(string(body)); id != "" {
+				return "gcp-" + id
+			}
+		}
 	}
-	return strings.TrimSpace(string(data))
+
+	// Fall back to /etc/machine-id (stable across reboots on the same disk).
+	data, err := os.ReadFile("/etc/machine-id")
+	if err == nil {
+		if id := strings.TrimSpace(string(data)); id != "" {
+			return id
+		}
+	}
+
+	h, _ := os.Hostname()
+	return h
 }
 
 // Load reads all valid history files and returns component history.

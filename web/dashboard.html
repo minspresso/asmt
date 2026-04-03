@@ -905,19 +905,21 @@ function gInitEvents() {
 
 function setActiveRange(seconds) {
   gSetRange(seconds);
+  fetchMetrics(seconds);
 }
 
-async function fetchMetrics() {
+async function fetchMetrics(rangeSeconds) {
   const btn = document.getElementById('metricsRefresh');
   if (btn) btn.textContent = '⟳';
+  const range = rangeSeconds || activeRangeSeconds;
   try {
-    const resp = await fetch('/api/metrics');
+    const resp = await fetch('/api/metrics?range=' + range);
     if (!resp.ok) return;
     const data = await resp.json();
     allMetricPoints = data.points || [];
     metricsNumCPUs  = data.num_cpus || 1;
     document.getElementById('metricsSection').style.display = '';
-    gSetRange(activeRangeSeconds);
+    gSetRange(range);
   } catch (e) {
     // Silently ignore
   } finally {

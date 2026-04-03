@@ -112,9 +112,20 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// handleMetrics returns up to 2016 downsampled metric points (≈7 days at 5-min resolution).
+// handleMetrics returns metric points for the requested range.
+// ?range=<seconds> — filters to the last N seconds at full resolution.
+// Omitting range returns the full 7-day buffer sampled to 2016 points.
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	points := s.scheduler.GetMetrics(2016)
+	var points []MetricPoint
+	if rangeStr := r.URL.Query().Get("range"); rangeStr != "" {
+		var secs int
+		if _, err := fmt.Sscanf(rangeStr, "%d", &secs); err == nil && secs > 0 {
+			points = s.scheduler.GetMetricsSince(time.Duration(secs)*time.Second, 2016)
+		}
+	}
+	if points == nil {
+		points = s.scheduler.GetMetrics(2016)
+	}
 
 	// Determine num_cpus from the latest linux-load result for load% normalisation.
 	numCPUs := 1

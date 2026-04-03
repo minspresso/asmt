@@ -62,6 +62,37 @@ func (mb *MetricsBuffer) Push(p MetricPoint) {
 	}
 }
 
+// Since returns points from the last d duration, sampled to at most maxPoints.
+// Unlike Get, it filters by time first so short ranges get full resolution.
+func (mb *MetricsBuffer) Since(d time.Duration, maxPoints int) []MetricPoint {
+	mb.mu.RLock()
+	defer mb.mu.RUnlock()
+
+	cutoff := time.Now().Unix() - int64(d.Seconds())
+	start := len(mb.points)
+	for i, p := range mb.points {
+		if p.T >= cutoff {
+			start = i
+			break
+		}
+	}
+	if start >= len(mb.points) {
+		return nil
+	}
+	pts := mb.points[start:]
+	if maxPoints <= 0 || len(pts) <= maxPoints {
+		out := make([]MetricPoint, len(pts))
+		copy(out, pts)
+		return out
+	}
+	step := float64(len(pts)) / float64(maxPoints)
+	out := make([]MetricPoint, 0, maxPoints)
+	for i := 0; i < maxPoints; i++ {
+		out = append(out, pts[int(float64(i)*step)])
+	}
+	return out
+}
+
 // Get returns up to maxPoints evenly sampled from the full buffer.
 func (mb *MetricsBuffer) Get(maxPoints int) []MetricPoint {
 	mb.mu.RLock()

@@ -276,6 +276,15 @@ func (s *Scheduler) alert(ctx context.Context, result CheckResult, prevStatus St
 	}
 }
 
+// GetMetricsSince returns points from the last d duration at full resolution
+// (sampled to maxPoints only if needed). Use for short time ranges.
+func (s *Scheduler) GetMetricsSince(d time.Duration, maxPoints int) []MetricPoint {
+	if s.metrics == nil {
+		return nil
+	}
+	return s.metrics.Since(d, maxPoints)
+}
+
 // GetMetrics returns up to maxPoints evenly sampled metric readings.
 func (s *Scheduler) GetMetrics(maxPoints int) []MetricPoint {
 	return s.metrics.Get(maxPoints)

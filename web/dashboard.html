@@ -73,18 +73,19 @@
   .check-item {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     padding: 8px 0;
     border-top: 1px solid #21262d;
     font-size: 13px;
+    gap: 8px;
   }
-  .check-name { color: #8b949e; min-width: 140px; }
-  .check-message { flex: 1; text-align: right; }
+  .check-name { color: #8b949e; white-space: nowrap; flex-shrink: 0; }
+  .check-message { flex: 1; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .check-message.msg-ok { color: #3fb950; }
   .check-message.msg-warn { color: #d29922; }
   .check-message.msg-critical { color: #f85149; }
   .check-message.msg-unknown { color: #8b949e; }
-  .check-duration { color: #484f58; font-size: 11px; margin-left: 8px; min-width: 50px; text-align: right; }
+  .check-duration { color: #484f58; font-size: 11px; white-space: nowrap; flex-shrink: 0; }
   .loading { text-align: center; padding: 40px; color: #8b949e; }
   .logs-section {
     margin-top: 24px;

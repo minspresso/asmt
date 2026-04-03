@@ -99,16 +99,21 @@ func (c *NginxChecker) checkConfig(ctx context.Context) CheckResult {
 	out := strings.TrimSpace(string(output))
 
 	if err != nil {
-		// nginx -t can fail with a non-zero exit code for reasons unrelated to
-		// config syntax — most commonly it cannot write the PID file when running
-		// inside a systemd sandbox (ProtectSystem=strict, read-only /run).
-		// If the output explicitly says the syntax is OK we treat it as a warning
-		// rather than critical so a sandboxed deployment doesn't show a false alarm.
-		if strings.Contains(out, "syntax is ok") {
+		// nginx -t exits non-zero for reasons unrelated to config syntax —
+		// most commonly it cannot write the PID file or open a log file when
+		// running inside a restricted environment (GCP VM, read-only /run,
+		// systemd sandbox). If the output explicitly confirms "syntax is ok"
+		// AND the only failure is a filesystem/permission error (EROFS, EACCES,
+		// ENOENT on /run or /var/log), treat it as fully OK — the config is valid.
+		syntaxOK := strings.Contains(out, "syntax is ok")
+		fsError := strings.Contains(out, "Read-only file system") ||
+			strings.Contains(out, "Permission denied") ||
+			strings.Contains(out, "open()") && strings.Contains(out, "failed")
+		if syntaxOK && fsError {
 			return CheckResult{
 				Component: "nginx-config",
-				Status:    StatusWarn,
-				Message:   c.tr.T("checks.nginx_config_valid") + " (pid file write blocked by sandbox)",
+				Status:    StatusOK,
+				Message:   c.tr.T("checks.nginx_config_valid"),
 				CheckedAt: time.Now(),
 			}
 		}

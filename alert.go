@@ -112,7 +112,7 @@ func (a *WebhookAlerter) Alert(ctx context.Context, result CheckResult, previous
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf(a.tr.T("alerts.webhook_error", resp.StatusCode))

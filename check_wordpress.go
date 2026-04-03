@@ -142,7 +142,7 @@ func (c *WordPressChecker) checkWPCron(ctx context.Context) CheckResult {
 			CheckedAt: time.Now(),
 		}
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	if resp.StatusCode >= 500 {
 		return CheckResult{
@@ -183,7 +183,7 @@ func (c *WordPressChecker) checkRESTAPI(ctx context.Context) CheckResult {
 			CheckedAt: time.Now(),
 		}
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	if resp.StatusCode >= 500 {
 		return CheckResult{

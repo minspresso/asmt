@@ -156,12 +156,12 @@ func (c *NginxChecker) checkHTTP(ctx context.Context, port int) CheckResult {
 			CheckedAt: time.Now(),
 		}
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	status := StatusOK
 	if resp.StatusCode >= 500 {
 		status = StatusCritical
-	} else if resp.StatusCode == 403 || resp.StatusCode == 401 || resp.StatusCode >= 400 && resp.StatusCode < 500 {
+	} else if resp.StatusCode >= 400 {
 		status = StatusWarn
 	}
 

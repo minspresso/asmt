@@ -48,9 +48,26 @@ func (c *SSLChecker) checkDomain(ctx context.Context, host string) CheckResult {
 	component := "ssl-" + host
 
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
-	conn, err := tls.DialWithDialer(dialer, "tcp", host+":443", &tls.Config{
-		ServerName: host,
-	})
+	rawConn, err := dialer.DialContext(ctx, "tcp", host+":443")
+	if err != nil {
+		return CheckResult{
+			Component: component,
+			Status:    StatusCritical,
+			Message:   fmt.Sprintf("TCP connection failed: %s", err.Error()),
+			CheckedAt: time.Now(),
+		}
+	}
+	tlsConn := tls.Client(rawConn, &tls.Config{ServerName: host})
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		rawConn.Close()
+		return CheckResult{
+			Component: component,
+			Status:    StatusCritical,
+			Message:   fmt.Sprintf("TLS handshake failed: %s", err.Error()),
+			CheckedAt: time.Now(),
+		}
+	}
+	conn := tlsConn
 	if err != nil {
 		return CheckResult{
 			Component: component,

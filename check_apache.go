@@ -144,7 +144,7 @@ func (c *ApacheChecker) checkHTTP(ctx context.Context, port int) CheckResult {
 			CheckedAt: time.Now(),
 		}
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	status := StatusOK
 	if resp.StatusCode >= 500 {

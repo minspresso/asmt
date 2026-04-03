@@ -233,15 +233,47 @@
     margin-left: 4px;
   }
   .metrics-refresh:hover { border-color: #58a6ff; color: #58a6ff; }
-  .metrics-svg-wrap {
+  .metrics-canvas-wrap {
+    position: relative;
     width: 100%;
-    overflow: hidden;
     border-radius: 4px;
     background: #0d1117;
+    overflow: hidden;
   }
-  .metrics-svg-wrap svg { display: block; width: 100%; height: 90px; }
+  #metricsCanvas {
+    display: block;
+    width: 100%;
+    cursor: crosshair;
+    user-select: none;
+    -webkit-user-select: none;
+  }
   .metrics-empty { color: #8b949e; font-size: 13px; padding: 20px 0; text-align: center; }
   .metrics-range { font-size: 11px; color: #484f58; margin-top: 6px; text-align: right; }
+  .metrics-hint  { font-size: 11px; color: #484f58; margin-top: 4px; text-align: center; }
+  .metrics-tooltip {
+    position: absolute;
+    background: #1c2128;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 12px;
+    min-width: 200px;
+    z-index: 10;
+    display: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    pointer-events: none;
+  }
+  .metrics-tooltip.tt-live { pointer-events: auto; }
+  .tt-time { color: #8b949e; font-size: 11px; margin-bottom: 8px; font-family: 'SFMono-Regular', Consolas, monospace; }
+  .tt-row  { display: flex; align-items: center; gap: 7px; margin: 4px 0; color: #e1e4e8; }
+  .tt-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .tt-copy-btn {
+    margin-top: 10px; width: 100%;
+    background: #21262d; border: 1px solid #30363d;
+    color: #8b949e; border-radius: 4px; padding: 5px 8px;
+    font-size: 11px; cursor: pointer;
+  }
+  .tt-copy-btn:hover { background: #30363d; color: #e1e4e8; }
 </style>
 </head>
 <body>
@@ -265,17 +297,24 @@
         <div class="metrics-controls">
           <button class="metrics-range-btn" data-seconds="900">15m</button>
           <button class="metrics-range-btn" data-seconds="1800">30m</button>
-          <button class="metrics-range-btn" data-seconds="86400">1d</button>
+          <button class="metrics-range-btn active" data-seconds="86400">1d</button>
           <button class="metrics-range-btn" data-seconds="259200">3d</button>
-          <button class="metrics-range-btn active" data-seconds="604800">7d</button>
+          <button class="metrics-range-btn" data-seconds="604800">7d</button>
           <button class="metrics-refresh" id="metricsRefresh" onclick="fetchMetrics()">&#8635;</button>
         </div>
       </div>
     </div>
-    <div class="metrics-svg-wrap" id="metricsSvgWrap">
-      <div class="metrics-empty">No data yet — check back after the first interval.</div>
+    <div class="metrics-canvas-wrap" id="metricsCanvasWrap">
+      <canvas id="metricsCanvas"></canvas>
+      <div class="metrics-tooltip" id="metricsTooltip">
+        <div class="tt-time" id="ttTime"></div>
+        <div class="tt-row"><span class="tt-dot" style="background:#58a6ff"></span><span id="ttMem">Memory: --</span></div>
+        <div class="tt-row"><span class="tt-dot" style="background:#3fb950"></span><span id="ttLoad">Load: --</span></div>
+        <button class="tt-copy-btn" id="ttCopyBtn">Copy</button>
+      </div>
     </div>
     <div class="metrics-range" id="metricsRange"></div>
+    <div class="metrics-hint">Scroll to zoom &middot; Drag to pan</div>
   </div>
 
   <div class="logs-section">
@@ -490,83 +529,335 @@ async function fetchStatus() {
   }
 }
 
-function buildSparkline(points, numCPUs) {
-  if (!points || points.length === 0) return null;
+// ─────────────────────────────────────────────
+// Canvas graph
+// ─────────────────────────────────────────────
 
-  const W = 800, H = 90, PAD = 2;
-  const inner = H - PAD * 2;
-
-  function toY(pct) {
-    const clamped = Math.min(100, Math.max(0, pct));
-    return PAD + inner * (1 - clamped / 100);
-  }
-
-  function buildPath(values) {
-    if (values.length === 0) return '';
-    const step = W / (values.length - 1 || 1);
-    return values.map((v, i) => {
-      const x = (values.length === 1 ? W / 2 : i * step).toFixed(1);
-      const y = toY(v).toFixed(1);
-      return (i === 0 ? 'M' : 'L') + x + ',' + y;
-    }).join(' ');
-  }
-
-  const memPcts  = points.map(p => p.m);
-  const loadPcts = points.map(p => Math.min(100, (p.l / numCPUs) * 100));
-
-  const memPath  = buildPath(memPcts);
-  const loadPath = buildPath(loadPcts);
-
-  // Area fill paths (close down to bottom)
-  function buildArea(values) {
-    if (values.length === 0) return '';
-    const step = W / (values.length - 1 || 1);
-    const pts = values.map((v, i) => {
-      const x = (values.length === 1 ? W / 2 : i * step).toFixed(1);
-      return x + ',' + toY(v).toFixed(1);
-    });
-    const lastX = (values.length === 1 ? W / 2 : (values.length - 1) * step).toFixed(1);
-    return 'M' + pts.join(' L') + ` L${lastX},${H} L0,${H} Z`;
-  }
-
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="${buildArea(memPcts)}"  fill="#58a6ff" fill-opacity="0.08"/>
-    <path d="${buildArea(loadPcts)}" fill="#3fb950" fill-opacity="0.08"/>
-    <path d="${memPath}"  fill="none" stroke="#58a6ff" stroke-width="1.5" stroke-linejoin="round"/>
-    <path d="${loadPath}" fill="none" stroke="#3fb950" stroke-width="1.5" stroke-linejoin="round"/>
-  </svg>`;
-}
+// Margins around the plot area (css px)
+const GC = { ML: 48, MR: 16, MT: 14, MB: 38 };
+const GH = 200; // total canvas height (css px)
 
 let allMetricPoints = [];
-let metricsNumCPUs = 1;
-let activeRangeSeconds = 604800; // default 7d
+let metricsNumCPUs  = 1;
+let activeRangeSeconds = 86400; // default 1d
 
-function renderMetrics() {
-  const wrap  = document.getElementById('metricsSvgWrap');
+// View window (unix seconds)
+let gViewStart = 0, gViewEnd = 0;
+
+// Drag state
+let gDragging = false, gDragStartX = 0, gDragStartVS = 0, gDragStartVE = 0;
+
+// Hover state
+let gHoverPoint = null;
+let gTtInside   = false;
+let gRafPending = false;
+
+function niceIntervalS(targetS) {
+  const steps = [30,60,120,300,600,900,1800,3600,7200,21600,43200,86400,172800];
+  for (const s of steps) if (s >= targetS) return s;
+  return steps[steps.length - 1];
+}
+
+function gFormatXLabel(ts, rangeS) {
+  const d = new Date(ts * 1000);
+  if (rangeS <= 3600)  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  if (rangeS <= 86400) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+         d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function gSetRange(seconds) {
+  activeRangeSeconds = seconds;
+  document.querySelectorAll('.metrics-range-btn').forEach(btn =>
+    btn.classList.toggle('active', Number(btn.dataset.seconds) === seconds));
+  const now = Math.floor(Date.now() / 1000);
+  gViewStart = now - seconds;
+  gViewEnd   = now;
+  gUpdateRangeLabel();
+  gScheduleDraw();
+}
+
+function gUpdateRangeLabel() {
   const rangeEl = document.getElementById('metricsRange');
+  if (!rangeEl) return;
+  const pts = allMetricPoints.filter(p => p.t >= gViewStart && p.t <= gViewEnd);
+  if (pts.length === 0) { rangeEl.textContent = ''; return; }
+  rangeEl.textContent =
+    new Date(pts[0].t * 1000).toLocaleString() + ' \u2192 ' +
+    new Date(pts[pts.length - 1].t * 1000).toLocaleString() +
+    ' (' + pts.length + ' readings)';
+}
 
-  const cutoff = Math.floor(Date.now() / 1000) - activeRangeSeconds;
-  const pts = allMetricPoints.filter(p => p.t >= cutoff);
+function gScheduleDraw() {
+  if (gRafPending) return;
+  gRafPending = true;
+  requestAnimationFrame(() => { gRafPending = false; gDraw(); });
+}
 
-  if (pts.length === 0) {
-    wrap.innerHTML = '<div class="metrics-empty">No data in this range yet.</div>';
-    rangeEl.textContent = '';
+function gDraw() {
+  const canvas = document.getElementById('metricsCanvas');
+  if (!canvas) return;
+  const wrap = document.getElementById('metricsCanvasWrap');
+  const W = wrap.clientWidth;
+  if (W === 0) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(GH * dpr)) {
+    canvas.width  = Math.round(W * dpr);
+    canvas.height = Math.round(GH * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = GH + 'px';
+  }
+
+  const ctx = canvas.getContext('2d');
+  ctx.save();
+  ctx.scale(dpr, dpr);
+
+  const plotW = W  - GC.ML - GC.MR;
+  const plotH = GH - GC.MT - GC.MB;
+
+  ctx.clearRect(0, 0, W, GH);
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, W, GH);
+
+  const rangeS = gViewEnd - gViewStart;
+  if (rangeS <= 0) { ctx.restore(); return; }
+
+  const tsToX  = ts => GC.ML + (ts - gViewStart) / rangeS * plotW;
+  const pctToY = p  => GC.MT + plotH * (1 - Math.min(Math.max(p, 0), 100) / 100);
+
+  // ── Y axis grid lines + labels ──
+  ctx.font = '11px monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (const pct of [0, 25, 50, 75, 100]) {
+    const y    = pctToY(pct);
+    const isKey = pct === 50 || pct === 100;
+    ctx.strokeStyle = isKey ? '#2d333b' : '#1e242b';
+    ctx.lineWidth   = 1;
+    if (pct === 50) ctx.setLineDash([4, 4]); else ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(GC.ML, y); ctx.lineTo(GC.ML + plotW, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = isKey ? '#8b949e' : '#484f58';
+    ctx.fillText(pct + '%', GC.ML - 6, y);
+  }
+
+  // ── Data series ──
+  const buf = rangeS * 0.01;
+  const visible = allMetricPoints.filter(p => p.t >= gViewStart - buf && p.t <= gViewEnd + buf);
+
+  if (visible.length >= 2) {
+    function drawSeries(pcts, color) {
+      const coords = pcts.map((v, i) => [tsToX(visible[i].t), pctToY(v)]);
+      // Area fill
+      ctx.beginPath();
+      ctx.moveTo(coords[0][0], coords[0][1]);
+      for (let i = 1; i < coords.length; i++) ctx.lineTo(coords[i][0], coords[i][1]);
+      ctx.lineTo(coords[coords.length - 1][0], GC.MT + plotH);
+      ctx.lineTo(coords[0][0], GC.MT + plotH);
+      ctx.closePath();
+      ctx.fillStyle = color + '14'; // ~8% opacity
+      ctx.fill();
+      // Line
+      ctx.beginPath();
+      ctx.moveTo(coords[0][0], coords[0][1]);
+      for (let i = 1; i < coords.length; i++) ctx.lineTo(coords[i][0], coords[i][1]);
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = 1.5;
+      ctx.lineJoin    = 'round';
+      ctx.setLineDash([]);
+      ctx.stroke();
+    }
+    drawSeries(visible.map(p => p.m), '#58a6ff');
+    drawSeries(visible.map(p => Math.min(100, (p.l / metricsNumCPUs) * 100)), '#3fb950');
+
+    // ── Hover crosshair + dots ──
+    if (gHoverPoint) {
+      const hx = tsToX(gHoverPoint.t);
+      ctx.strokeStyle = '#484f58';
+      ctx.lineWidth   = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(hx, GC.MT); ctx.lineTo(hx, GC.MT + plotH); ctx.stroke();
+      ctx.setLineDash([]);
+      const dotPairs = [
+        [gHoverPoint.m, '#58a6ff'],
+        [Math.min(100, (gHoverPoint.l / metricsNumCPUs) * 100), '#3fb950'],
+      ];
+      for (const [val, color] of dotPairs) {
+        const hy = pctToY(val);
+        ctx.fillStyle = '#0d1117';
+        ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  // ── X axis ticks + labels ──
+  const maxTicks = Math.max(2, Math.min(8, Math.floor(plotW / 90)));
+  const tickStep = niceIntervalS(rangeS / maxTicks);
+  const firstTick = Math.ceil(gViewStart / tickStep) * tickStep;
+  ctx.textAlign     = 'center';
+  ctx.textBaseline  = 'top';
+  ctx.fillStyle     = '#8b949e';
+  ctx.font          = '11px monospace';
+  ctx.strokeStyle   = '#30363d';
+  ctx.lineWidth     = 1;
+  ctx.setLineDash([]);
+  for (let ts = firstTick; ts <= gViewEnd; ts += tickStep) {
+    const xPx = tsToX(ts);
+    if (xPx < GC.ML + 2 || xPx > GC.ML + plotW - 2) continue;
+    ctx.beginPath(); ctx.moveTo(xPx, GC.MT + plotH); ctx.lineTo(xPx, GC.MT + plotH + 4); ctx.stroke();
+    ctx.fillText(gFormatXLabel(ts, rangeS), xPx, GC.MT + plotH + 8);
+  }
+
+  // ── Axis border ──
+  ctx.strokeStyle = '#30363d';
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(GC.ML, GC.MT);
+  ctx.lineTo(GC.ML, GC.MT + plotH);
+  ctx.lineTo(GC.ML + plotW, GC.MT + plotH);
+  ctx.stroke();
+
+  // ── No-data message ──
+  if (visible.length === 0) {
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle    = '#484f58';
+    ctx.font         = '13px sans-serif';
+    ctx.fillText(
+      allMetricPoints.length === 0 ? 'Collecting data\u2026' : 'No data in this time range',
+      GC.ML + plotW / 2, GC.MT + plotH / 2
+    );
+  }
+
+  ctx.restore();
+}
+
+function gUpdateTooltip(mouseX, mouseY, wrapW) {
+  const tooltip = document.getElementById('metricsTooltip');
+  const plotW   = wrapW - GC.ML - GC.MR;
+  const plotH   = GH    - GC.MT - GC.MB;
+  const inPlot  = mouseX >= GC.ML && mouseX <= GC.ML + plotW &&
+                  mouseY >= GC.MT && mouseY <= GC.MT + plotH;
+
+  if (!inPlot) {
+    if (!gTtInside) { tooltip.style.display = 'none'; gHoverPoint = null; gScheduleDraw(); }
     return;
   }
 
-  wrap.innerHTML = buildSparkline(pts, metricsNumCPUs) || '';
+  const rangeS  = gViewEnd - gViewStart;
+  const mouseTs = gViewStart + (mouseX - GC.ML) / plotW * rangeS;
+  const vis     = allMetricPoints.filter(p => p.t >= gViewStart && p.t <= gViewEnd);
+  if (vis.length === 0) return;
 
-  const oldest = new Date(pts[0].t * 1000);
-  const newest = new Date(pts[pts.length - 1].t * 1000);
-  rangeEl.textContent = oldest.toLocaleString() + ' → ' + newest.toLocaleString() + ' (' + pts.length + ' readings)';
+  let nearest = vis[0];
+  for (const p of vis) if (Math.abs(p.t - mouseTs) < Math.abs(nearest.t - mouseTs)) nearest = p;
+
+  gHoverPoint = nearest;
+  gScheduleDraw();
+
+  if (!gTtInside) {
+    const loadPct = Math.min(100, (nearest.l / metricsNumCPUs) * 100);
+    document.getElementById('ttTime').textContent  = new Date(nearest.t * 1000).toLocaleString();
+    document.getElementById('ttMem').textContent   = 'Memory: ' + nearest.m + '%';
+    document.getElementById('ttLoad').textContent  = 'Load: ' + loadPct.toFixed(1) + '% (1m avg)';
+
+    tooltip.style.display = 'block';
+    tooltip.classList.add('tt-live');
+
+    const ttW = tooltip.offsetWidth  || 210;
+    const ttH = tooltip.offsetHeight || 120;
+    let left  = mouseX + 14;
+    if (left + ttW > wrapW - 4) left = mouseX - ttW - 14;
+    let top = mouseY - ttH / 2;
+    if (top < 4) top = 4;
+    if (top + ttH > GH - 4) top = GH - ttH - 4;
+    tooltip.style.left = left + 'px';
+    tooltip.style.top  = top  + 'px';
+  }
+}
+
+function gInitEvents() {
+  const canvas  = document.getElementById('metricsCanvas');
+  const wrap    = document.getElementById('metricsCanvasWrap');
+  const tooltip = document.getElementById('metricsTooltip');
+  if (!canvas || !wrap) return;
+
+  tooltip.addEventListener('mouseenter', () => { gTtInside = true;  });
+  tooltip.addEventListener('mouseleave', () => { gTtInside = false; });
+
+  document.getElementById('ttCopyBtn').addEventListener('click', () => {
+    if (!gHoverPoint) return;
+    const loadPct = Math.min(100, (gHoverPoint.l / metricsNumCPUs) * 100);
+    const text = [
+      'Time: '   + new Date(gHoverPoint.t * 1000).toLocaleString(),
+      'Memory: ' + gHoverPoint.m + '%',
+      'Load: '   + loadPct.toFixed(1) + '% (1m avg)',
+    ].join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('ttCopyBtn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+    }).catch(() => {});
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    if (gDragging) return;
+    const r = wrap.getBoundingClientRect();
+    gUpdateTooltip(e.clientX - r.left, e.clientY - r.top, r.width);
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    if (!gTtInside) { tooltip.style.display = 'none'; gHoverPoint = null; gScheduleDraw(); }
+  });
+
+  // Scroll → zoom around cursor
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const r      = wrap.getBoundingClientRect();
+    const plotW  = r.width - GC.ML - GC.MR;
+    const ratio  = Math.max(0, Math.min(1, (e.clientX - r.left - GC.ML) / plotW));
+    const rangeS = gViewEnd - gViewStart;
+    const mouseTs = gViewStart + ratio * rangeS;
+    const factor  = e.deltaY > 0 ? 1.4 : 1 / 1.4;
+    const newRange = Math.max(60, Math.min(7 * 86400, rangeS * factor));
+    gViewStart = mouseTs - ratio * newRange;
+    gViewEnd   = mouseTs + (1 - ratio) * newRange;
+    gUpdateRangeLabel();
+    gScheduleDraw();
+  }, { passive: false });
+
+  // Drag → pan
+  canvas.addEventListener('mousedown', e => {
+    gDragging    = true;
+    gDragStartX  = e.clientX;
+    gDragStartVS = gViewStart;
+    gDragStartVE = gViewEnd;
+    canvas.style.cursor = 'grabbing';
+    tooltip.style.display = 'none';
+    gHoverPoint = null;
+  });
+  window.addEventListener('mousemove', e => {
+    if (!gDragging) return;
+    const r     = wrap.getBoundingClientRect();
+    const plotW = r.width - GC.ML - GC.MR;
+    const dtS   = -(e.clientX - gDragStartX) / plotW * (gDragStartVE - gDragStartVS);
+    gViewStart  = gDragStartVS + dtS;
+    gViewEnd    = gDragStartVE + dtS;
+    gUpdateRangeLabel();
+    gScheduleDraw();
+  });
+  window.addEventListener('mouseup', () => {
+    if (gDragging) { gDragging = false; canvas.style.cursor = 'crosshair'; }
+  });
+
+  if (window.ResizeObserver) new ResizeObserver(() => gScheduleDraw()).observe(wrap);
 }
 
 function setActiveRange(seconds) {
-  activeRangeSeconds = seconds;
-  document.querySelectorAll('.metrics-range-btn').forEach(btn => {
-    btn.classList.toggle('active', Number(btn.dataset.seconds) === seconds);
-  });
-  renderMetrics();
+  gSetRange(seconds);
 }
 
 async function fetchMetrics() {
@@ -577,10 +868,9 @@ async function fetchMetrics() {
     if (!resp.ok) return;
     const data = await resp.json();
     allMetricPoints = data.points || [];
-    metricsNumCPUs = data.num_cpus || 1;
-
+    metricsNumCPUs  = data.num_cpus || 1;
     document.getElementById('metricsSection').style.display = '';
-    renderMetrics();
+    gSetRange(activeRangeSeconds);
   } catch (e) {
     // Silently ignore
   } finally {
@@ -598,6 +888,7 @@ loadI18n().then(() => {
   fetchStatus();
   fetchLogs();
   fetchMetrics();
+  gInitEvents();
   setInterval(fetchStatus, 5000);
   setInterval(fetchLogs, 10000);
 });

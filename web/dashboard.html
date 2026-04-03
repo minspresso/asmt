@@ -195,7 +195,7 @@
   </div>
 
 <script>
-const COMPONENT_ORDER = ['loadbalancer', 'linux', 'firewall', 'nginx', 'apache', 'phpfpm', 'mariadb', 'wordpress'];
+const COMPONENT_ORDER = ['loadbalancer', 'linux', 'firewall', 'nginx', 'apache', 'phpfpm', 'mariadb', 'wordpress', 'ssl'];
 
 // i18n strings (loaded from /api/i18n, with English fallbacks)
 let i18n = {
@@ -213,7 +213,8 @@ let i18n = {
     nginx: 'Nginx',
     phpfpm: 'PHP-FPM',
     mariadb: 'MariaDB',
-    wordpress: 'WordPress'
+    wordpress: 'WordPress',
+    ssl: 'SSL Certificates'
   },
   status: {
     ok: 'OK',

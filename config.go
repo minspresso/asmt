@@ -34,16 +34,27 @@ type ServerConfig struct {
 }
 
 type ChecksConfig struct {
-	LoadBalancer  LBCheckConfig         `yaml:"loadbalancer"`
-	Linux         LinuxCheckConfig      `yaml:"linux"`
-	Firewall      FirewallCheckConfig   `yaml:"firewall"`
-	HTTPServer    HTTPServerCheckConfig `yaml:"http_server"`
-	PHPFPM        PHPFPMCheckConfig     `yaml:"phpfpm"`
-	MariaDB       MariaDBCheckConfig    `yaml:"mariadb"`
-	WordPress     WordPressCheckConfig  `yaml:"wordpress"`
-	Redis         RedisCheckConfig      `yaml:"redis"`
-	PostgreSQL    PostgreSQLCheckConfig `yaml:"postgresql"`
-	HTTPEndpoints []HTTPEndpointConfig  `yaml:"http_endpoints"`
+	LoadBalancer    LBCheckConfig         `yaml:"loadbalancer"`
+	Linux           LinuxCheckConfig      `yaml:"linux"`
+	Firewall        FirewallCheckConfig   `yaml:"firewall"`
+	HTTPServer      HTTPServerCheckConfig `yaml:"http_server"`
+	PHPFPM          PHPFPMCheckConfig     `yaml:"phpfpm"`
+	MariaDB         MariaDBCheckConfig    `yaml:"mariadb"`
+	WordPress       WordPressCheckConfig  `yaml:"wordpress"`
+	Redis           RedisCheckConfig      `yaml:"redis"`
+	PostgreSQL      PostgreSQLCheckConfig `yaml:"postgresql"`
+	HTTPEndpoints   []HTTPEndpointConfig  `yaml:"http_endpoints"`
+	SSLCertificates SSLConfig             `yaml:"ssl_certificates"`
+}
+
+// SSLConfig configures TLS certificate expiry checks.
+// Domains are checked on port 443. Hosts are also auto-collected
+// from any https:// WordPress or HTTP endpoint URLs in the config.
+type SSLConfig struct {
+	Enabled      bool     `yaml:"enabled"`
+	WarnDays     int      `yaml:"warn_days"`     // default 30
+	CriticalDays int      `yaml:"critical_days"` // default 7
+	Domains      []string `yaml:"domains"`       // explicit list; merged with auto-detected
 }
 
 type HTTPServerCheckConfig struct {

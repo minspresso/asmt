@@ -62,6 +62,30 @@ detect_phpfpm() {
     fi
 }
 
+detect_ssl_domains() {
+    local domains=""
+    # Grep server_name from nginx sites-enabled — install-time only, not runtime.
+    # Skips catch-all (_), localhost, and IPs. Returns up to 10 real domain names.
+    if [ -d /etc/nginx/sites-enabled ]; then
+        domains=$(grep -rh "server_name" /etc/nginx/sites-enabled/ 2>/dev/null \
+            | sed 's/.*server_name\s*//;s/;//' \
+            | tr ' ' '\n' \
+            | grep -v "^_$" \
+            | grep -v "^localhost$" \
+            | grep -E "^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$" \
+            | sort -u | head -10)
+    elif [ -d /etc/nginx/conf.d ]; then
+        domains=$(grep -rh "server_name" /etc/nginx/conf.d/ 2>/dev/null \
+            | sed 's/.*server_name\s*//;s/;//' \
+            | tr ' ' '\n' \
+            | grep -v "^_$" \
+            | grep -v "^localhost$" \
+            | grep -E "^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$" \
+            | sort -u | head -10)
+    fi
+    echo "${domains}"
+}
+
 detect_init() {
     if command -v systemctl &>/dev/null && systemctl --version &>/dev/null 2>&1; then
         echo "systemd"
@@ -80,12 +104,14 @@ HTTP_SERVER=$(detect_http_server)
 INIT_SYSTEM=$(detect_init)
 HAS_MARIADB=$(detect_mariadb)
 HAS_PHPFPM=$(detect_phpfpm)
+SSL_DOMAINS=$(detect_ssl_domains)
 
 info "Detected distro:      ${DISTRO}"
 info "Detected HTTP server: ${HTTP_SERVER:-none}"
 info "Detected init system: ${INIT_SYSTEM}"
 info "Detected MariaDB:     ${HAS_MARIADB}"
 info "Detected PHP-FPM:     ${HAS_PHPFPM}"
+info "Detected domains:     ${SSL_DOMAINS:-none}"
 
 # --- Locate or build binary ---
 if [ -f "./${BINARY_NAME}" ]; then
@@ -171,6 +197,13 @@ checks:
     enabled: false
     url: "http://localhost"
     expect_body: "</html>"
+
+  ssl_certificates:
+    enabled: $([ -n "${SSL_DOMAINS}" ] && echo "true" || echo "false")
+    warn_days: 30
+    critical_days: 7
+    domains:
+$(echo "${SSL_DOMAINS}" | grep -v "^$" | sed 's/^/      - "/' | sed 's/$/"/' || echo "      []")
 
 logs:
   enabled: true

@@ -140,6 +140,18 @@ func main() {
 		}
 	}
 
+	if cfg.Checks.SSLCertificates.Enabled {
+		domains := sslDomains(cfg)
+		if len(domains) > 0 {
+			checkers = append(checkers, NewSSLChecker(
+				domains,
+				cfg.Checks.SSLCertificates.WarnDays,
+				cfg.Checks.SSLCertificates.CriticalDays,
+				tr,
+			))
+		}
+	}
+
 	// Build alerters
 	var alerters []Alerter
 	if cfg.Alerts.Log.Enabled {
@@ -229,6 +241,40 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 	httpServer.Shutdown(shutdownCtx)
+}
+
+// sslDomains builds a deduplicated list of HTTPS hosts to check.
+// Starts from explicit config, then adds hosts from any https:// WordPress
+// or HTTP endpoint URLs already configured — no separate config entry needed.
+func sslDomains(cfg *Config) []string {
+	seen := make(map[string]struct{})
+	var out []string
+
+	add := func(host string) {
+		if host == "" {
+			return
+		}
+		if _, dup := seen[host]; !dup {
+			seen[host] = struct{}{}
+			out = append(out, host)
+		}
+	}
+
+	for _, d := range cfg.Checks.SSLCertificates.Domains {
+		add(strings.TrimSpace(d))
+	}
+
+	if cfg.Checks.WordPress.Enabled && strings.HasPrefix(cfg.Checks.WordPress.URL, "https://") {
+		add(strings.TrimPrefix(strings.SplitN(cfg.Checks.WordPress.URL[8:], "/", 2)[0], "www."))
+	}
+
+	for _, ep := range cfg.Checks.HTTPEndpoints {
+		if ep.Enabled && strings.HasPrefix(ep.URL, "https://") {
+			add(strings.SplitN(ep.URL[8:], "/", 2)[0])
+		}
+	}
+
+	return out
 }
 
 // guessLogSource infers the service name from a log file path.

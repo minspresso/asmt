@@ -166,7 +166,8 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	scheduler := NewScheduler(checkers, cfg.CheckInterval.Duration, alerter, logger, tr)
+	historyStore := NewHistoryStore(*configPath)
+	scheduler := NewScheduler(checkers, cfg.CheckInterval.Duration, alerter, logger, tr, historyStore)
 	go scheduler.Start(ctx)
 
 	// Start log watcher

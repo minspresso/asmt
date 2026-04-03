@@ -22,27 +22,39 @@ type Scheduler struct {
 	results        map[string][]CheckResult
 	previousStatus map[string]Status
 	history        map[string][]HistoryDay // component -> up to 7 days, oldest first
+	historyStore   *HistoryStore
 	interval       time.Duration
 	alerter        Alerter
 	logger         *slog.Logger
 	tr             *Translations
 }
 
-func NewScheduler(checkers []Checker, interval time.Duration, alerter Alerter, logger *slog.Logger, tr *Translations) *Scheduler {
+func NewScheduler(checkers []Checker, interval time.Duration, alerter Alerter, logger *slog.Logger, tr *Translations, store *HistoryStore) *Scheduler {
 	// Guard against zero/negative interval (would panic in NewTicker)
 	if interval <= 0 {
 		interval = 30 * time.Second
 	}
-	return &Scheduler{
+
+	s := &Scheduler{
 		checkers:       checkers,
 		results:        make(map[string][]CheckResult),
 		previousStatus: make(map[string]Status),
 		history:        make(map[string][]HistoryDay),
+		historyStore:   store,
 		interval:       interval,
 		alerter:        alerter,
 		logger:         logger,
 		tr:             tr,
 	}
+
+	// Seed in-memory history from disk on startup.
+	if store != nil {
+		for component, days := range store.Load() {
+			s.history[component] = days
+		}
+	}
+
+	return s
 }
 
 // historyPriority ranks statuses for worst-of-day tracking.
@@ -201,6 +213,13 @@ func (s *Scheduler) runAll(ctx context.Context) {
 	// Send alerts without holding the lock (prevents slow webhook/SMTP from blocking reads)
 	for _, a := range alerts {
 		s.alert(ctx, a.result, a.prevStatus)
+	}
+
+	// Persist today's history to disk outside the lock.
+	if s.historyStore != nil {
+		if err := s.historyStore.Save(s.GetHistory()); err != nil {
+			s.logger.Warn("failed to persist history", "error", err)
+		}
 	}
 }
 

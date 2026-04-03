@@ -263,8 +263,14 @@
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     pointer-events: none;
   }
-  .metrics-tooltip.tt-live { pointer-events: auto; }
-  .tt-time { color: #8b949e; font-size: 11px; margin-bottom: 8px; font-family: 'SFMono-Regular', Consolas, monospace; }
+  .metrics-tooltip.tt-pinned {
+    pointer-events: auto;
+    border-color: #58a6ff55;
+  }
+  .tt-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .tt-time { color: #8b949e; font-size: 11px; font-family: 'SFMono-Regular', Consolas, monospace; }
+  .tt-close { background: none; border: none; color: #484f58; font-size: 14px; cursor: pointer; padding: 0 0 0 8px; line-height: 1; }
+  .tt-close:hover { color: #e1e4e8; }
   .tt-row  { display: flex; align-items: center; gap: 7px; margin: 4px 0; color: #e1e4e8; }
   .tt-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .tt-copy-btn {
@@ -307,14 +313,17 @@
     <div class="metrics-canvas-wrap" id="metricsCanvasWrap">
       <canvas id="metricsCanvas"></canvas>
       <div class="metrics-tooltip" id="metricsTooltip">
-        <div class="tt-time" id="ttTime"></div>
+        <div class="tt-header">
+          <div class="tt-time" id="ttTime"></div>
+          <button class="tt-close" id="ttClose" title="Dismiss">&times;</button>
+        </div>
         <div class="tt-row"><span class="tt-dot" style="background:#58a6ff"></span><span id="ttMem">Memory: --</span></div>
         <div class="tt-row"><span class="tt-dot" style="background:#3fb950"></span><span id="ttLoad">Load: --</span></div>
         <button class="tt-copy-btn" id="ttCopyBtn">Copy</button>
       </div>
     </div>
     <div class="metrics-range" id="metricsRange"></div>
-    <div class="metrics-hint">Scroll to zoom &middot; Drag to pan</div>
+    <div class="metrics-hint">Scroll to zoom &middot; Drag to pan &middot; Click to pin tooltip</div>
   </div>
 
   <div class="logs-section">
@@ -545,10 +554,12 @@ let activeRangeSeconds = 86400; // default 1d
 let gViewStart = 0, gViewEnd = 0;
 
 // Drag state
-let gDragging = false, gDragStartX = 0, gDragStartVS = 0, gDragStartVE = 0;
+let gDragging = false, gDragMoved = false;
+let gDragStartX = 0, gDragStartVS = 0, gDragStartVE = 0;
 
-// Hover state
+// Hover / pin state
 let gHoverPoint = null;
+let gPinned     = false; // tooltip locked in place by click
 let gTtInside   = false;
 let gRafPending = false;
 
@@ -735,7 +746,17 @@ function gDraw() {
   ctx.restore();
 }
 
+function gDismissTooltip() {
+  const tooltip = document.getElementById('metricsTooltip');
+  gPinned = false;
+  tooltip.classList.remove('tt-pinned');
+  tooltip.style.display = 'none';
+  gHoverPoint = null;
+  gScheduleDraw();
+}
+
 function gUpdateTooltip(mouseX, mouseY, wrapW) {
+  if (gPinned) return; // pinned — don't move or hide
   const tooltip = document.getElementById('metricsTooltip');
   const plotW   = wrapW - GC.ML - GC.MR;
   const plotH   = GH    - GC.MT - GC.MB;
@@ -765,7 +786,6 @@ function gUpdateTooltip(mouseX, mouseY, wrapW) {
     document.getElementById('ttLoad').textContent  = 'Load: ' + loadPct.toFixed(1) + '% (1m avg)';
 
     tooltip.style.display = 'block';
-    tooltip.classList.add('tt-live');
 
     const ttW = tooltip.offsetWidth  || 210;
     const ttH = tooltip.offsetHeight || 120;
@@ -787,6 +807,12 @@ function gInitEvents() {
 
   tooltip.addEventListener('mouseenter', () => { gTtInside = true;  });
   tooltip.addEventListener('mouseleave', () => { gTtInside = false; });
+
+  // Close button dismisses pinned tooltip
+  document.getElementById('ttClose').addEventListener('click', gDismissTooltip);
+
+  // Escape key dismisses pinned tooltip
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') gDismissTooltip(); });
 
   document.getElementById('ttCopyBtn').addEventListener('click', () => {
     if (!gHoverPoint) return;
@@ -810,7 +836,15 @@ function gInitEvents() {
   });
 
   canvas.addEventListener('mouseleave', () => {
-    if (!gTtInside) { tooltip.style.display = 'none'; gHoverPoint = null; gScheduleDraw(); }
+    if (!gPinned && !gTtInside) { tooltip.style.display = 'none'; gHoverPoint = null; gScheduleDraw(); }
+  });
+
+  // Click to pin tooltip in place so it can be interacted with
+  canvas.addEventListener('click', () => {
+    if (gDragMoved) return; // was a drag, not a click
+    if (!gHoverPoint) return;
+    gPinned = true;
+    tooltip.classList.add('tt-pinned');
   });
 
   // Scroll → zoom around cursor
@@ -832,6 +866,7 @@ function gInitEvents() {
   // Drag → pan
   canvas.addEventListener('mousedown', e => {
     gDragging    = true;
+    gDragMoved   = false;
     gDragStartX  = e.clientX;
     gDragStartVS = gViewStart;
     gDragStartVE = gViewEnd;
@@ -841,6 +876,7 @@ function gInitEvents() {
   });
   window.addEventListener('mousemove', e => {
     if (!gDragging) return;
+    gDragMoved = true;
     const r     = wrap.getBoundingClientRect();
     const plotW = r.width - GC.ML - GC.MR;
     const dtS   = -(e.clientX - gDragStartX) / plotW * (gDragStartVE - gDragStartVS);

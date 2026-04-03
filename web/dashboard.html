@@ -919,6 +919,22 @@ async function fetchMetrics(rangeSeconds) {
     allMetricPoints = data.points || [];
     metricsNumCPUs  = data.num_cpus || 1;
     document.getElementById('metricsSection').style.display = '';
+    // If data covers less than half the requested range, auto-fit to actual data
+    // so the graph fills the canvas rather than showing mostly empty space.
+    if (allMetricPoints.length >= 2) {
+      const now = Math.floor(Date.now() / 1000);
+      const dataSpan = allMetricPoints[allMetricPoints.length - 1].t - allMetricPoints[0].t;
+      if (dataSpan < range * 0.5) {
+        activeRangeSeconds = range;
+        document.querySelectorAll('.metrics-range-btn').forEach(btn =>
+          btn.classList.toggle('active', Number(btn.dataset.seconds) === range));
+        gViewStart = allMetricPoints[0].t;
+        gViewEnd   = now;
+        gUpdateRangeLabel();
+        gScheduleDraw();
+        return;
+      }
+    }
     gSetRange(range);
   } catch (e) {
     // Silently ignore

@@ -248,6 +248,8 @@ Restart=always
 RestartSec=5
 User=root
 WorkingDirectory=${INSTALL_DIR}
+Environment="GOGC=50"
+Environment="GOMEMLIMIT=12MiB"
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true

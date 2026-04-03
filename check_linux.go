@@ -28,6 +28,7 @@ func (c *LinuxChecker) Check(ctx context.Context) []CheckResult {
 	var results []CheckResult
 	results = append(results, c.checkDisk()...)
 	results = append(results, c.checkMemory())
+	results = append(results, c.checkDNS())
 	results = append(results, c.checkLoadAvg())
 	return results
 }
@@ -220,6 +221,64 @@ func (c *LinuxChecker) checkLoadAvg() CheckResult {
 			"load_15m": fields[2],
 			"num_cpus": strconv.Itoa(int(numCPU)),
 		},
+		CheckedAt: time.Now(),
+	}
+}
+
+// knownDNS maps well-known nameserver IPs to their provider names.
+var knownDNS = map[string]string{
+	"1.1.1.1":         "Cloudflare",
+	"1.0.0.1":         "Cloudflare",
+	"8.8.8.8":         "Google",
+	"8.8.4.4":         "Google",
+	"9.9.9.9":         "Quad9",
+	"149.112.112.112": "Quad9",
+	"208.67.222.222":  "OpenDNS",
+	"208.67.220.220":  "OpenDNS",
+	"169.254.169.254": "GCP internal",
+}
+
+func (c *LinuxChecker) checkDNS() CheckResult {
+	data, err := os.ReadFile("/etc/resolv.conf")
+	if err != nil {
+		return CheckResult{
+			Component: "linux-dns",
+			Status:    StatusUnknown,
+			Message:   "cannot read /etc/resolv.conf: " + err.Error(),
+			CheckedAt: time.Now(),
+		}
+	}
+
+	var servers []string
+	var labels []string
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[0] != "nameserver" {
+			continue
+		}
+		ip := fields[1]
+		servers = append(servers, ip)
+		if provider, ok := knownDNS[ip]; ok {
+			labels = append(labels, fmt.Sprintf("%s (%s)", ip, provider))
+		} else {
+			labels = append(labels, ip)
+		}
+	}
+
+	if len(labels) == 0 {
+		return CheckResult{
+			Component: "linux-dns",
+			Status:    StatusUnknown,
+			Message:   "no nameservers found in /etc/resolv.conf",
+			CheckedAt: time.Now(),
+		}
+	}
+
+	return CheckResult{
+		Component: "linux-dns",
+		Status:    StatusOK,
+		Message:   strings.Join(labels, ", "),
+		Details:   map[string]string{"nameservers": strings.Join(servers, ",")},
 		CheckedAt: time.Now(),
 	}
 }

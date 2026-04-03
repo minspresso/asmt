@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ type Scheduler struct {
 	previousStatus map[string]Status
 	history        map[string][]HistoryDay // component -> up to 7 days, oldest first
 	historyStore   *HistoryStore
+	metrics        *MetricsBuffer
 	interval       time.Duration
 	alerter        Alerter
 	logger         *slog.Logger
@@ -41,6 +43,7 @@ func NewScheduler(checkers []Checker, interval time.Duration, alerter Alerter, l
 		previousStatus: make(map[string]Status),
 		history:        make(map[string][]HistoryDay),
 		historyStore:   store,
+		metrics:        NewMetricsBuffer(store),
 		interval:       interval,
 		alerter:        alerter,
 		logger:         logger,
@@ -221,6 +224,47 @@ func (s *Scheduler) runAll(ctx context.Context) {
 			s.logger.Warn("failed to persist history", "error", err)
 		}
 	}
+
+	// Record a metrics point from the Linux checker results.
+	s.mu.RLock()
+	memResults := s.results["linux"]
+	s.mu.RUnlock()
+	if pt, ok := extractMetricPoint(memResults); ok {
+		s.metrics.Push(pt)
+	}
+}
+
+// extractMetricPoint pulls mem% and load_1m out of Linux checker results.
+func extractMetricPoint(results []CheckResult) (MetricPoint, bool) {
+	var mem uint8
+	var load float32
+	var hasMem, hasLoad bool
+
+	for _, r := range results {
+		if r.Component == "linux-memory" && r.Details != nil {
+			if v, ok := r.Details["usage_pct"]; ok {
+				var pct int
+				if _, err := fmt.Sscanf(v, "%d", &pct); err == nil {
+					mem = uint8(pct)
+					hasMem = true
+				}
+			}
+		}
+		if r.Component == "linux-load" && r.Details != nil {
+			if v, ok := r.Details["load_1m"]; ok {
+				var l float32
+				if _, err := fmt.Sscanf(v, "%f", &l); err == nil {
+					load = l
+					hasLoad = true
+				}
+			}
+		}
+	}
+
+	if hasMem && hasLoad {
+		return MetricPoint{T: time.Now().Unix(), M: mem, L: load}, true
+	}
+	return MetricPoint{}, false
 }
 
 func (s *Scheduler) alert(ctx context.Context, result CheckResult, prevStatus Status) {
@@ -230,6 +274,11 @@ func (s *Scheduler) alert(ctx context.Context, result CheckResult, prevStatus St
 	if err := s.alerter.Alert(ctx, result, prevStatus); err != nil {
 		s.logger.Error(s.tr.T("server.alert_failed"), "component", result.Component, "error", err)
 	}
+}
+
+// GetMetrics returns up to maxPoints evenly sampled metric readings.
+func (s *Scheduler) GetMetrics(maxPoints int) []MetricPoint {
+	return s.metrics.Get(maxPoints)
 }
 
 // GetStatus returns a snapshot of all current check results.

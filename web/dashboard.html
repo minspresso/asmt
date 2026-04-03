@@ -178,6 +178,53 @@
   .hday-warn     { background: #d29922; }
   .hday-critical { background: #f85149; }
   .hday-unknown  { background: #21262d; }
+  .metrics-section {
+    margin-top: 24px;
+    padding: 16px;
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+  }
+  .metrics-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .metrics-title { font-size: 16px; font-weight: 600; }
+  .metrics-legend {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: #8b949e;
+  }
+  .legend-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .metrics-refresh {
+    background: none;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #8b949e;
+    font-size: 12px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  .metrics-refresh:hover { border-color: #58a6ff; color: #58a6ff; }
+  .metrics-svg-wrap {
+    width: 100%;
+    overflow: hidden;
+    border-radius: 4px;
+    background: #0d1117;
+  }
+  .metrics-svg-wrap svg { display: block; width: 100%; height: 90px; }
+  .metrics-empty { color: #8b949e; font-size: 13px; padding: 20px 0; text-align: center; }
+  .metrics-range { font-size: 11px; color: #484f58; margin-top: 6px; text-align: right; }
 </style>
 </head>
 <body>
@@ -190,6 +237,23 @@
   <div id="grid" class="grid">
     <div class="loading" id="loadingText">Loading status data...</div>
   </div>
+  <div class="metrics-section" id="metricsSection" style="display:none">
+    <div class="metrics-header">
+      <span class="metrics-title">Resource Usage (7 days)</span>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="metrics-legend">
+          <span><span class="legend-dot" style="background:#58a6ff"></span>Memory %</span>
+          <span><span class="legend-dot" style="background:#3fb950"></span>Load %</span>
+        </div>
+        <button class="metrics-refresh" id="metricsRefresh" onclick="fetchMetrics()">&#8635; Refresh</button>
+      </div>
+    </div>
+    <div class="metrics-svg-wrap" id="metricsSvgWrap">
+      <div class="metrics-empty" id="metricsEmpty">No data yet — check back after the first interval.</div>
+    </div>
+    <div class="metrics-range" id="metricsRange"></div>
+  </div>
+
   <div class="logs-section">
     <h2 id="logsTitle">Log Warnings</h2>
     <div id="logsContainer" class="logs-empty">No warnings detected in logs</div>
@@ -402,10 +466,94 @@ async function fetchStatus() {
   }
 }
 
+function buildSparkline(points, numCPUs) {
+  if (!points || points.length === 0) return null;
+
+  const W = 800, H = 90, PAD = 2;
+  const inner = H - PAD * 2;
+
+  function toY(pct) {
+    const clamped = Math.min(100, Math.max(0, pct));
+    return PAD + inner * (1 - clamped / 100);
+  }
+
+  function buildPath(values) {
+    if (values.length === 0) return '';
+    const step = W / (values.length - 1 || 1);
+    return values.map((v, i) => {
+      const x = (values.length === 1 ? W / 2 : i * step).toFixed(1);
+      const y = toY(v).toFixed(1);
+      return (i === 0 ? 'M' : 'L') + x + ',' + y;
+    }).join(' ');
+  }
+
+  const memPcts  = points.map(p => p.m);
+  const loadPcts = points.map(p => Math.min(100, (p.l / numCPUs) * 100));
+
+  const memPath  = buildPath(memPcts);
+  const loadPath = buildPath(loadPcts);
+
+  // Area fill paths (close down to bottom)
+  function buildArea(values) {
+    if (values.length === 0) return '';
+    const step = W / (values.length - 1 || 1);
+    const pts = values.map((v, i) => {
+      const x = (values.length === 1 ? W / 2 : i * step).toFixed(1);
+      return x + ',' + toY(v).toFixed(1);
+    });
+    const lastX = (values.length === 1 ? W / 2 : (values.length - 1) * step).toFixed(1);
+    return 'M' + pts.join(' L') + ` L${lastX},${H} L0,${H} Z`;
+  }
+
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="${buildArea(memPcts)}"  fill="#58a6ff" fill-opacity="0.08"/>
+    <path d="${buildArea(loadPcts)}" fill="#3fb950" fill-opacity="0.08"/>
+    <path d="${memPath}"  fill="none" stroke="#58a6ff" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="${loadPath}" fill="none" stroke="#3fb950" stroke-width="1.5" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+async function fetchMetrics() {
+  const btn = document.getElementById('metricsRefresh');
+  if (btn) btn.textContent = '⟳ Loading…';
+  try {
+    const resp = await fetch('/api/metrics');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const points = data.points || [];
+    const numCPUs = data.num_cpus || 1;
+
+    const section = document.getElementById('metricsSection');
+    section.style.display = '';
+
+    const wrap  = document.getElementById('metricsSvgWrap');
+    const empty = document.getElementById('metricsEmpty');
+    const range = document.getElementById('metricsRange');
+
+    if (points.length === 0) {
+      wrap.innerHTML = '<div class="metrics-empty">No data yet — check back after the first interval.</div>';
+      range.textContent = '';
+      return;
+    }
+
+    const svg = buildSparkline(points, numCPUs);
+    wrap.innerHTML = svg || '';
+
+    const oldest = new Date(points[0].t * 1000);
+    const newest = new Date(points[points.length - 1].t * 1000);
+    range.textContent = oldest.toLocaleString() + ' → ' + newest.toLocaleString() + ' (' + points.length + ' readings)';
+  } catch (e) {
+    // Silently ignore
+  } finally {
+    if (btn) btn.textContent = '↻ Refresh';
+  }
+}
+
 // Load translations first, then start polling
 loadI18n().then(() => {
   fetchStatus();
   fetchLogs();
+  fetchMetrics();
   setInterval(fetchStatus, 5000);
   setInterval(fetchLogs, 10000);
 });

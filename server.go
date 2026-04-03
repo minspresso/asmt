@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -64,6 +65,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.handleDashboard)
 	mux.HandleFunc("GET /api/status", s.handleStatus)
+	mux.HandleFunc("GET /api/metrics", s.handleMetrics)
 	mux.HandleFunc("GET /api/logs", s.handleLogs)
 	mux.HandleFunc("GET /api/i18n", s.handleI18n)
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
@@ -108,6 +110,34 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache, no-store")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// handleMetrics returns up to 2016 downsampled metric points (≈7 days at 5-min resolution).
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	points := s.scheduler.GetMetrics(2016)
+
+	// Determine num_cpus from the latest linux-load result for load% normalisation.
+	numCPUs := 1
+	status := s.scheduler.GetStatus()
+	for _, results := range status {
+		for _, res := range results {
+			if res.Component == "linux-load" && res.Details != nil {
+				if v := res.Details["num_cpus"]; v != "" {
+					var n int
+					if _, err := fmt.Sscanf(v, "%d", &n); err == nil && n > 0 {
+						numCPUs = n
+					}
+				}
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store")
+	json.NewEncoder(w).Encode(map[string]any{
+		"points":   points,
+		"num_cpus": numCPUs,
+	})
 }
 
 // handleI18n returns translations for the dashboard frontend.

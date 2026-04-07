@@ -175,6 +175,44 @@ to a normal user.
 
 ---
 
+## The auth lesson: don't make the tool depend on the thing it monitors
+
+The first real deployment of asmt put `/stats.html` behind WordPress's
+existing admin session. The reasoning sounded clean: the operator was
+already logged in, so reuse that session — single sign-on, no extra
+password, no separate user database.
+
+It failed in two ways that only became visible during real incidents:
+
+**1. The dashboard became unreachable exactly when it was needed.**
+A traffic spike that saturated PHP-FPM also broke the auth check, because
+the auth check went *through* PHP. The monitoring tool was now coupled
+to the health of the thing it was supposed to be monitoring. The
+worst-day principle applies to authentication too: if your auth path can
+fail under load, your dashboard fails under load.
+
+**2. The WAF flagged the host application's session cookie as a scanner
+token.** WordPress session cookies are 200+ bytes of high-entropy hex —
+exactly what cloud WAF scanner-detection rules are tuned to catch. The
+day a stricter WAF rule went live, every logged-in admin started seeing
+404s on the dashboard URL while anonymous visitors saw normal pages.
+Hours of debugging later, the cause was "your cookie looks like an
+attack signature."
+
+The fix in both cases was the same: **decouple.** Replace the
+auth-via-host-app with HTTP Basic Auth at the reverse proxy. Two lines
+of nginx config, one flat password file, zero PHP, zero database, zero
+cookie. Now the dashboard works during a host-app outage, works with no
+host app at all, and is invisible to WAF cookie heuristics because Basic
+Auth headers are short and structured.
+
+> **A monitoring tool's auth should depend on as few things as possible
+> — ideally only the kernel and the reverse proxy already in front of
+> it. Each extra component in the auth chain is one more thing that can
+> fail exactly when you most need the dashboard to work.**
+
+---
+
 ## Design principles (the rules I'd ship today)
 
 1. **Trust the OS more than yourself.** The journal is always authoritative.
@@ -192,6 +230,9 @@ to a normal user.
     environment.
 11. **Supplement, don't replace.** The meta-rule that contains all the
     others.
+12. **Minimize the auth dependency footprint.** A monitoring tool's auth
+    path should not require the host application or its database to be
+    healthy.
 
 ---
 

@@ -352,8 +352,19 @@ func (s *Syncer) streamJournalctl(ctx context.Context, args ...string) (int, int
 	// the real underlying error first.
 	waitErr := cmd.Wait()
 
-	if scanErr != nil && scanErr != bufio.ErrTooLong {
-		return lines, added, scanErr
+	if scanErr != nil {
+		if scanErr == bufio.ErrTooLong {
+			// A single journal entry exceeded the 1MB scanner max.
+			// This is not a fatal error — the rest of the scan already
+			// completed — but it DOES mean we silently lost an entry
+			// that might have been important. Log it server-side so
+			// operators can investigate if they see the warning.
+			s.logger.Warn("journal entry exceeded 1MB scanner buffer; entry skipped",
+				"lines_parsed", lines,
+				"events_added", added)
+		} else {
+			return lines, added, scanErr
+		}
 	}
 	if waitErr != nil && ctx.Err() == nil {
 		return lines, added, waitErr
@@ -389,8 +400,21 @@ func parseJournalLine(line []byte) (LogEntry, bool) {
 	}
 
 	// Microseconds since epoch → time.Time.
+	//
+	// Defensive bounds: real journal timestamps are always non-negative
+	// and fit comfortably in int64 microseconds. A malicious or corrupted
+	// journalctl could emit values that cause overflow when multiplied
+	// by 1000 (nanoseconds per microsecond):
+	//   max safe usec = math.MaxInt64 / 1000 ≈ 9.2e15 microseconds
+	//                 ≈ year 294247
+	// Anything outside [0, 9.2e15] is rejected to prevent silently-wrong
+	// timestamps and year-2262 overflow bugs.
 	usec, err := strconv.ParseInt(f.RealtimeTimestamp, 10, 64)
 	if err != nil {
+		return LogEntry{}, false
+	}
+	const maxSafeUsec int64 = 9223372036854775 // math.MaxInt64 / 1000
+	if usec < 0 || usec > maxSafeUsec {
 		return LogEntry{}, false
 	}
 	ts := time.Unix(0, usec*int64(time.Microsecond)).UTC()

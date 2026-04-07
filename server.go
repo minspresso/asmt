@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "embed"
@@ -64,6 +65,65 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
+// sameOriginPOST enforces that POST requests carry an Origin header that
+// matches the server's own Host, blocking simple cross-site POSTs from
+// triggering state-changing operations (a best-effort CSRF defense for a
+// tool that doesn't use cookies or auth tokens).
+//
+// Rules:
+//   - Non-POST requests pass through unchanged.
+//   - POST with no Origin AND no Referer is rejected (a browser always
+//     sends at least one for cross-origin requests; a missing-both is
+//     suspicious but does happen for some CLI tools that do send from
+//     the dashboard origin, so we allow same-host Referer as fallback).
+//   - POST with Origin must match r.Host.
+//   - POST with only Referer must start with the same scheme://host.
+//
+// This is intentionally not a full CSRF token scheme — we don't manage
+// sessions. The goal is to block the drive-by attack where a victim
+// visits attacker.example while the dashboard is open in another tab.
+func sameOriginPOST(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			next.ServeHTTP(w, r)
+			return
+		}
+		origin := r.Header.Get("Origin")
+		referer := r.Header.Get("Referer")
+		if origin == "" && referer == "" {
+			http.Error(w, "missing Origin/Referer", http.StatusForbidden)
+			return
+		}
+		if origin != "" {
+			if !matchesHost(origin, r.Host) {
+				http.Error(w, "cross-origin POST blocked", http.StatusForbidden)
+				return
+			}
+		} else if !matchesHost(referer, r.Host) {
+			http.Error(w, "cross-origin POST blocked", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// matchesHost checks whether a full URL (or origin) targets the given Host
+// header value. Accepts both scheme://host[:port] and scheme://host[:port]/path.
+func matchesHost(urlOrOrigin, host string) bool {
+	// Strip scheme
+	for _, scheme := range []string{"https://", "http://"} {
+		if len(urlOrOrigin) > len(scheme) && urlOrOrigin[:len(scheme)] == scheme {
+			urlOrOrigin = urlOrOrigin[len(scheme):]
+			break
+		}
+	}
+	// Take up to first slash
+	if i := strings.IndexByte(urlOrOrigin, '/'); i >= 0 {
+		urlOrOrigin = urlOrOrigin[:i]
+	}
+	return urlOrOrigin == host
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.handleDashboard)
@@ -74,7 +134,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sync", s.handleSyncStatus)
 	mux.HandleFunc("GET /api/i18n", s.handleI18n)
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
-	return securityHeaders(mux)
+	// Order: securityHeaders outermost so every response (including the
+	// CSRF 403) carries the hardening headers, then sameOriginPOST to
+	// block cross-site state-changing requests, then the mux.
+	return securityHeaders(sameOriginPOST(mux))
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {

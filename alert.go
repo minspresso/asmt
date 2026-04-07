@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -115,7 +116,10 @@ func (a *WebhookAlerter) Alert(ctx context.Context, result CheckResult, previous
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf(a.tr.T("alerts.webhook_error", resp.StatusCode))
+		// errors.New (not fmt.Errorf) because the translated string may
+		// contain literal "%" characters that fmt would misinterpret
+		// as format verbs.
+		return errors.New(a.tr.T("alerts.webhook_error", resp.StatusCode))
 	}
 	return nil
 }

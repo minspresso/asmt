@@ -46,6 +46,16 @@ func (c *HTTPEndpointChecker) Name() string {
 }
 
 func (c *HTTPEndpointChecker) Check(ctx context.Context) []CheckResult {
+	// Reject non-HTTP URLs — an operator misconfig (or a hostile config
+	// writer) otherwise lets us probe file://, unix://, etc.
+	if !isHTTPURL(c.cfg.URL) {
+		return []CheckResult{{
+			Component: c.Name(),
+			Status:    StatusCritical,
+			Message:   c.tr.T("checks.http_request_error", "url must be http:// or https://"),
+			CheckedAt: time.Now(),
+		}}
+	}
 	method := c.cfg.Method
 	if method == "" {
 		method = "GET"

@@ -19,6 +19,33 @@ type PHPFPMChecker struct {
 	tr     *Translations
 }
 
+// isPHPFPMProcess returns true if `name` is a legitimate php-fpm process
+// name. Accepts:
+//   - "php-fpm"                        (unversioned)
+//   - "php-fpm<digit>..." e.g. "php-fpm8.2", "php-fpm7.4"
+//   - "php<digit>.<digit>-fpm"         e.g. "php8.2-fpm" (Debian)
+// Rejects noise like "php-fpm-monitor", "php-fpmXYZ", "fake-php-fpm".
+func isPHPFPMProcess(name string) bool {
+	if name == "php-fpm" {
+		return true
+	}
+	// "php-fpm<digit>..." — next char after "php-fpm" must be a digit
+	if strings.HasPrefix(name, "php-fpm") && len(name) > 7 {
+		c := name[7]
+		if c >= '0' && c <= '9' {
+			return true
+		}
+	}
+	// "phpN.M-fpm" — "php" + digit + optional ".digit" + "-fpm"
+	if strings.HasPrefix(name, "php") && strings.HasSuffix(name, "-fpm") {
+		ver := name[3 : len(name)-4]
+		if len(ver) > 0 && ver[0] >= '0' && ver[0] <= '9' {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *PHPFPMChecker) Name() string { return "phpfpm" }
 
 func (c *PHPFPMChecker) Check(ctx context.Context) []CheckResult {
@@ -52,8 +79,13 @@ func (c *PHPFPMChecker) checkProcess() CheckResult {
 			continue
 		}
 		name := strings.TrimSpace(string(comm))
-		// Match "php-fpm" and versioned variants like "php-fpm8.2"
-		if name == "php-fpm" || strings.HasPrefix(name, "php-fpm") {
+		// Match "php-fpm" and versioned variants like "php-fpm8.2",
+		// "php-fpm7.4", or "php8.2-fpm" (Debian pattern).
+		// Tight match: the name must either equal "php-fpm" exactly OR
+		// start with "php-fpm" followed by a version digit/separator, OR
+		// match "phpN.M-fpm". This rejects accidental false positives
+		// like "php-fpm-monitor" or "php-fpmXYZ".
+		if isPHPFPMProcess(name) {
 			return CheckResult{
 				Component: "phpfpm-process",
 				Status:    StatusOK,

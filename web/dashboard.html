@@ -535,6 +535,28 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// ─── Status / severity whitelists ───
+// Every value interpolated into a CSS class name is mapped through one of
+// these dictionaries first. If the server sends an unexpected value (bug,
+// injection attempt, version mismatch), we fall back to "unknown" instead
+// of letting it shape the DOM. This is a defense-in-depth measure: in the
+// current codebase every status value already comes from a Go enum
+// (Status.String()), but a typo in a future refactor would otherwise
+// silently inject whatever string lands in data.overall into the DOM.
+const STATUS_CLASS = {
+  ok: 'ok',
+  warn: 'warn',
+  critical: 'critical',
+  unknown: 'unknown',
+};
+const SEVERITY_CLASS = {
+  error: 'error',
+  warn: 'warn',
+  info: 'info',
+};
+function safeStatus(v) { return STATUS_CLASS[v] || 'unknown'; }
+function safeSeverity(v) { return SEVERITY_CLASS[v] || 'info'; }
+
 function worstStatus(checks) {
   const priority = { critical: 3, warn: 2, unknown: 1, ok: 0 };
   let worst = 'ok';
@@ -580,7 +602,7 @@ function renderHistoryBar(checks, history) {
 
   const dayLabels = { ok: 'OK', warn: 'Warning', critical: 'Critical', unknown: 'No data' };
   let bars = merged.map((d, i) => {
-    const safeStatus = escapeHtml(d.status);
+    const statusClass = safeStatus(d.status);
     const det = detailsByDay[i];
     // Build a detailed tooltip. Explicit about provenance: this is what
     // WE recorded from checks, not what the OS log says.
@@ -590,8 +612,8 @@ function renderHistoryBar(checks, history) {
     if (det.critical.length > 0 || det.warn.length > 0) {
       label += '\n\nSource: periodic checks. Click to see investigate commands.';
     }
-    const clickable = (d.status === 'warn' || d.status === 'critical') ? ' hday-click' : '';
-    return `<div class="history-day hday-${safeStatus}${clickable}" title="${escapeHtml(label)}" data-date="${escapeHtml(d.date)}"></div>`;
+    const clickable = (statusClass === 'warn' || statusClass === 'critical') ? ' hday-click' : '';
+    return `<div class="history-day hday-${statusClass}${clickable}" title="${escapeHtml(label)}" data-date="${escapeHtml(d.date)}"></div>`;
   }).join('');
 
   return `<div class="history-bar">
@@ -721,14 +743,14 @@ function renderCard(name, checks, history) {
   let html = `<div class="card">
     <div class="card-header">
       <span class="card-title">${displayName}</span>
-      <span class="card-status dot-${escapeHtml(worst)}"></span>
+      <span class="card-status dot-${safeStatus(worst)}"></span>
     </div>`;
 
   for (const check of checks) {
-    const safeStatus = escapeHtml(check.status);
+    const statusClass = safeStatus(check.status);
     html += `<div class="check-item">
       <span class="check-name">${escapeHtml(check.component)}</span>
-      <span class="check-message msg-${safeStatus}">${escapeHtml(check.message)}</span>
+      <span class="check-message msg-${statusClass}">${escapeHtml(check.message)}</span>
       <span class="check-duration">${escapeHtml(check.duration)}</span>
     </div>`;
   }
@@ -812,7 +834,8 @@ function buildChips(entries) {
   let html = '';
   for (const e of entries) {
     const count = e.count || 1;
-    html += `<span class="log-chip log-chip-${escapeHtml(e.severity)}">${escapeHtml(e.source)} \u00b7 ${escapeHtml(e.title)} \u00d7${count.toLocaleString()}</span>`;
+    const sevClass = safeSeverity(e.severity);
+    html += `<span class="log-chip log-chip-${sevClass}">${escapeHtml(e.source)} \u00b7 ${escapeHtml(e.title)} \u00d7${count.toLocaleString()}</span>`;
   }
   return html;
 }
@@ -829,7 +852,7 @@ function buildChips(entries) {
 function buildBucketBody(entries) {
   let html = '';
   for (const e of entries) {
-    const safeSev = escapeHtml(e.severity);
+    const safeSev = safeSeverity(e.severity);
     const count = e.count || 1;
     const firstTime = new Date(e.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const lastTime = e.last_seen ? new Date(e.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : firstTime;
@@ -938,7 +961,7 @@ async function fetchStatus() {
 
     const overall = document.getElementById('overall');
     overall.textContent = statusLabel(data.overall);
-    overall.className = `overall-badge status-${data.overall}`;
+    overall.className = 'overall-badge status-' + safeStatus(data.overall);
 
     document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
 

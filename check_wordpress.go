@@ -20,7 +20,23 @@ type WordPressChecker struct {
 	client     *http.Client
 }
 
+// isHTTPURL returns true only for URLs starting with http:// or https://.
+// Rejects file://, unix://, gopher://, and any other scheme a Go http.Client
+// might otherwise treat specially. Used to guard checker URLs read from
+// config so a config-writer with no business changing transport schemes
+// cannot coerce the checker into reading local files.
+func isHTTPURL(u string) bool {
+	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
+}
+
 func NewWordPressChecker(url, expectBody string, tlsSkipVerify bool, tr *Translations) *WordPressChecker {
+	// Reject non-HTTP schemes at construction time. If config contains an
+	// invalid URL we leave the checker in a state where every check call
+	// will immediately fail with a clear message instead of silently
+	// reading files.
+	if url != "" && !isHTTPURL(url) {
+		url = "" // downstream checkers will treat empty as "not configured"
+	}
 	return &WordPressChecker{
 		URL:        url,
 		ExpectBody: expectBody,

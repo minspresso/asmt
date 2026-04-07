@@ -167,6 +167,8 @@ func (s *Server) handleI18n(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleLogs returns recent log warnings with mitigation advice.
+// ?range=<seconds> — returns entries from the last N seconds (loads from disk if needed).
+// Omitting range returns the in-memory buffer (most recent ~200 entries).
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache, no-store")
@@ -176,7 +178,17 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries := s.logWatcher.GetEntries()
+	var entries []LogEntry
+	if rangeStr := r.URL.Query().Get("range"); rangeStr != "" {
+		var secs int
+		if _, err := fmt.Sscanf(rangeStr, "%d", &secs); err == nil && secs > 0 {
+			entries = s.logWatcher.GetEntriesSince(time.Duration(secs) * time.Second)
+		}
+	}
+	if entries == nil {
+		entries = s.logWatcher.GetEntries()
+	}
+
 	// Return in reverse chronological order (newest first)
 	reversed := make([]LogEntry, len(entries))
 	for i, e := range entries {

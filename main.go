@@ -194,7 +194,7 @@ func main() {
 		} else {
 			logFiles = DefaultLogFiles()
 		}
-		logWatcher = NewLogWatcher(logFiles, DefaultLogPatterns(), cfg.Logs.BufferSize, tr)
+		logWatcher = NewLogWatcher(logFiles, DefaultLogPatterns(), cfg.Logs.BufferSize, tr, historyStore)
 		go logWatcher.Start(ctx)
 		logger.Info("log watcher started", "files", len(logFiles), "buffer_size", cfg.Logs.BufferSize)
 	}
@@ -229,6 +229,11 @@ func main() {
 
 	logger.Info(tr.T("server.shutting_down"))
 	cancel()
+
+	// Flush log entries to disk before exiting.
+	if logWatcher != nil {
+		logWatcher.saveLogs()
+	}
 
 	// Clean up persistent connections
 	if mariadbChecker != nil {
@@ -272,6 +277,11 @@ func sslDomains(cfg *Config) []string {
 		if ep.Enabled && strings.HasPrefix(ep.URL, "https://") {
 			add(strings.SplitN(ep.URL[8:], "/", 2)[0])
 		}
+	}
+
+	// Auto-detect domains from nginx server blocks listening on 443/ssl.
+	for _, d := range nginxDomains() {
+		add(d)
 	}
 
 	return out

@@ -233,9 +233,35 @@ else
     warn "Config already exists at ${INSTALL_DIR}/${CONFIG_FILE}, skipping"
 fi
 
+# --- Create environment file for secrets (if it doesn't exist) ---
+if [ ! -f "${INSTALL_DIR}/env" ]; then
+    cat > "${INSTALL_DIR}/env" << 'ENVFILE'
+# Secrets for Server-Stat — loaded by systemd EnvironmentFile.
+# This file persists across reboots. Restart the service after editing:
+#   sudo systemctl restart serverstat
+#
+# MARIADB_DSN=monitor:password@tcp(127.0.0.1:3306)/mysql
+# POSTGRES_DSN=postgres://user:pass@localhost/db?sslmode=disable
+# REDIS_PASSWORD=secret
+# WEBHOOK_URL=https://hooks.example.com/alert
+ENVFILE
+    chmod 600 "${INSTALL_DIR}/env"
+    info "Environment file created at ${INSTALL_DIR}/env (chmod 600)"
+else
+    warn "Environment file already exists at ${INSTALL_DIR}/env, skipping"
+fi
+
 # --- Install service ---
 if [ "${INIT_SYSTEM}" = "systemd" ]; then
     info "Installing systemd service..."
+    # Build ReadOnlyPaths based on detected HTTP server and SSL certs.
+    READONLY_PATHS=""
+    [ -d /etc/nginx ] && READONLY_PATHS="${READONLY_PATHS} /etc/nginx"
+    [ -d /etc/apache2 ] && READONLY_PATHS="${READONLY_PATHS} /etc/apache2"
+    [ -d /etc/httpd ] && READONLY_PATHS="${READONLY_PATHS} /etc/httpd"
+    [ -d /etc/letsencrypt ] && READONLY_PATHS="${READONLY_PATHS} /etc/letsencrypt"
+    READONLY_LINE=""
+    [ -n "${READONLY_PATHS}" ] && READONLY_LINE="ReadOnlyPaths=${READONLY_PATHS}"
     cat > "/etc/systemd/system/${SERVICE_NAME}.service" << EOF
 [Unit]
 Description=Server-Stat Monitoring Service
@@ -248,11 +274,13 @@ Restart=always
 RestartSec=5
 User=root
 WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=-${INSTALL_DIR}/env
 Environment="GOGC=50"
 Environment="GOMEMLIMIT=12MiB"
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
+${READONLY_LINE}
 ReadWritePaths=${INSTALL_DIR} /run
 PrivateTmp=true
 
@@ -276,9 +304,25 @@ pidfile="/run/${SERVICE_NAME}.pid"
 output_log="/var/log/${SERVICE_NAME}.log"
 error_log="/var/log/${SERVICE_NAME}.log"
 
+# GC tuning (match systemd Environment settings)
+export GOGC=50
+export GOMEMLIMIT=12MiB
+
 depend() {
     need net
     after firewall
+}
+
+start_pre() {
+    # Load secrets from env file (same file systemd uses)
+    if [ -f "${INSTALL_DIR}/env" ]; then
+        while IFS='=' read -r key value; do
+            case "\$key" in
+                ''|\#*) continue ;;
+            esac
+            export "\$key=\$value"
+        done < "${INSTALL_DIR}/env"
+    fi
 }
 EOF
     chmod 755 "/etc/init.d/${SERVICE_NAME}"

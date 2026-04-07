@@ -8,3 +8,11 @@ config.local.yaml
 .vscode/
 *.swp
 *~
+
+# AI assistant files
+CLAUDE.md
+.claude/
+.cursorrules
+.cursor/
+.github/copilot-*
+copilot-*

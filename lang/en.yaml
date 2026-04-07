@@ -170,6 +170,8 @@ logs:
   nginx_upstream_refused_fix: "PHP-FPM or backend service is down. Check: systemctl status php*-fpm. Verify the upstream socket/port matches php-fpm pool listen directive."
   nginx_body_too_large_title: "Client request body too large"
   nginx_body_too_large_fix: "Increase client_max_body_size in nginx.conf (e.g., client_max_body_size 64m;). Also check upload_max_filesize and post_max_size in php.ini."
+  nginx_cache_unlink_title: "Nginx cache file removal failed"
+  nginx_cache_unlink_fix: "Stale fastcgi cache files could not be deleted. Check cache directory permissions and disk space. May indicate cache directory corruption — consider: sudo rm -rf /var/cache/nginx/fastcgi/* && sudo systemctl reload nginx."
 
   # PHP-FPM patterns
   php_memory_limit_title: "PHP memory limit exceeded"
@@ -182,6 +184,8 @@ logs:
   php_undefined_func_fix: "A required PHP extension is missing. Install it with your package manager (apt/dnf/pacman). Common: php-mysql, php-curl, php-gd, php-xml, php-mbstring."
   php_fatal_title: "PHP fatal error"
   php_fatal_fix: "Check the full error in the PHP-FPM log. Common causes: syntax errors, missing files, incompatible plugin updates. Review recent code changes."
+  php_child_killed_title: "PHP-FPM child process killed (SIGKILL)"
+  php_child_killed_fix: "A PHP-FPM worker was killed by the OOM killer or hit a memory limit. Check dmesg for OOM events. Reduce pm.max_children or increase server memory."
 
   # MariaDB patterns
   mariadb_too_many_conn_title: "MariaDB too many connections"

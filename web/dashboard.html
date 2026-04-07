@@ -98,50 +98,153 @@
     margin-bottom: 12px;
   }
   .logs-empty { color: #8b949e; font-size: 13px; padding: 16px 0; }
-  .log-entry {
+
+  /* ── Collapsible 15-min log buckets ── */
+  .log-bucket {
     background: #161b22;
     border: 1px solid #21262d;
     border-radius: 8px;
-    padding: 12px 16px;
     margin-bottom: 8px;
+    scroll-margin-top: var(--sticky-h, 320px);
   }
-  .log-entry-header {
+  .log-bucket-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 13px;
+  }
+  .log-bucket-header:hover { background: #1c2128; border-radius: 8px; }
+  .log-bucket-arrow {
+    color: #484f58;
+    font-size: 11px;
+    flex-shrink: 0;
+    transition: transform 0.15s;
+    width: 14px;
+    text-align: center;
+  }
+  .log-bucket.open .log-bucket-arrow { transform: rotate(90deg); }
+  .log-bucket-time {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+    color: #8b949e;
+    flex-shrink: 0;
+  }
+  .log-bucket-count {
+    background: #21262d;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 11px;
+    color: #8b949e;
+    flex-shrink: 0;
+  }
+  .log-bucket-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+  }
+  .log-chip {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .log-chip-error { background: #5a1a1a; color: #f85149; }
+  .log-chip-warn  { background: #4a3000; color: #d29922; }
+  .log-chip-info  { background: #21262d; color: #8b949e; }
+  .log-bucket-body {
+    display: none;
+    padding: 0 14px 12px;
+    border-top: 1px solid #21262d;
+  }
+  .log-bucket.open .log-bucket-body { display: block; }
+
+  /* Error type group inside an expanded bucket */
+  .log-type-group { margin-top: 10px; }
+  .log-type-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 6px;
   }
-  .log-title { font-weight: 600; font-size: 14px; }
-  .log-title.sev-error { color: #f85149; }
-  .log-title.sev-warn { color: #d29922; }
-  .log-title.sev-info { color: #8b949e; }
-  .log-source {
+  .log-type-title { font-weight: 600; font-size: 13px; }
+  .log-type-title.sev-error { color: #f85149; }
+  .log-type-title.sev-warn { color: #d29922; }
+  .log-type-title.sev-info { color: #8b949e; }
+  .log-type-source {
     font-size: 11px;
     padding: 2px 8px;
     border-radius: 10px;
     background: #21262d;
     color: #8b949e;
   }
-  .log-line {
-    font-family: 'SFMono-Regular', Consolas, monospace;
-    font-size: 12px;
-    color: #8b949e;
-    word-break: break-all;
-    margin: 6px 0;
-    padding: 6px 8px;
-    background: #0d1117;
-    border-radius: 4px;
-    max-height: 60px;
-    overflow: hidden;
-  }
   .log-mitigation {
-    font-size: 13px;
+    font-size: 12px;
     color: #58a6ff;
-    padding: 6px 0 0 0;
-    border-top: 1px solid #21262d;
-    margin-top: 6px;
+    margin: 4px 0 6px;
   }
-  .log-time { font-size: 11px; color: #484f58; }
+  .log-lines-toggle {
+    font-size: 11px;
+    color: #484f58;
+    cursor: pointer;
+    margin-bottom: 4px;
+  }
+  .log-lines-toggle:hover { color: #8b949e; }
+  .log-lines-list { display: none; }
+  .log-lines-list.open { display: block; }
+  .log-line-item {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 11px;
+    color: #6e7681;
+    padding: 3px 8px;
+    background: #0d1117;
+    border-radius: 3px;
+    margin: 3px 0;
+    max-height: 40px;
+    overflow: hidden;
+    word-break: break-all;
+  }
+  .log-line-time {
+    font-size: 10px;
+    color: #484f58;
+    float: right;
+    margin-left: 8px;
+  }
+
+  /* Highlight flash for bucket clicked from graph */
+  @keyframes bucket-flash {
+    0%, 100% { border-color: #21262d; }
+    25% { border-color: #58a6ff; box-shadow: 0 0 12px #58a6ff33; }
+    50% { border-color: #21262d; }
+    75% { border-color: #58a6ff; box-shadow: 0 0 12px #58a6ff33; }
+  }
+  .log-bucket.flash { animation: bucket-flash 1.5s ease; }
+
+  /* Floating navigation buttons */
+  .float-nav {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 60;
+  }
+  .float-nav-btn {
+    background: #1c2128;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #6e7681;
+    font-size: 11px;
+    padding: 5px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .float-nav-btn:hover { border-color: #484f58; color: #8b949e; }
   .error-banner {
     background: #5a1a1a;
     border: 1px solid #f85149;
@@ -184,6 +287,9 @@
     background: #161b22;
     border: 1px solid #21262d;
     border-radius: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
   }
   .metrics-header {
     display: flex;
@@ -303,10 +409,13 @@
         <div class="metrics-legend">
           <span><span class="legend-dot" style="background:#58a6ff"></span>Memory %</span>
           <span><span class="legend-dot" style="background:#3fb950"></span>Load %</span>
+          <span><span style="color:#f85149;font-size:10px;margin-right:4px;vertical-align:middle">&#9660;</span>Log events</span>
         </div>
         <div class="metrics-controls">
           <button class="metrics-range-btn" data-seconds="900">15m</button>
           <button class="metrics-range-btn" data-seconds="1800">30m</button>
+          <button class="metrics-range-btn" data-seconds="3600">1h</button>
+          <button class="metrics-range-btn" data-seconds="10800">3h</button>
           <button class="metrics-range-btn" data-seconds="43200">12h</button>
           <button class="metrics-range-btn active" data-seconds="86400">1d</button>
           <button class="metrics-range-btn" data-seconds="259200">3d</button>
@@ -329,12 +438,17 @@
       </div>
     </div>
     <div class="metrics-range" id="metricsRange"></div>
-    <div class="metrics-hint">Scroll to zoom &middot; Drag to pan &middot; Click to pin tooltip</div>
+    <div class="metrics-hint">Drag to pan &middot; Click to pin tooltip &middot; <span style="color:#f85149">&#9660;</span> Click marker to jump to logs</div>
   </div>
 
   <div class="logs-section">
     <h2 id="logsTitle">Log Warnings</h2>
     <div id="logsContainer" class="logs-empty">No warnings detected in logs</div>
+  </div>
+
+  <div class="float-nav">
+    <button class="float-nav-btn" onclick="window.scrollTo({top:0,behavior:'smooth'})">&#8593; Top</button>
+    <button class="float-nav-btn" onclick="document.getElementById('metricsSection').scrollIntoView({behavior:'smooth'})">&#9650; Graph</button>
   </div>
 
 <script>
@@ -374,7 +488,7 @@ let i18n = {
 
 function escapeHtml(str) {
   const div = document.createElement('div');
-  div.textContent = str;
+  div.textContent = str == null ? '' : str;
   return div.innerHTML;
 }
 
@@ -404,8 +518,8 @@ function renderHistoryBar(checks, history) {
     if (!merged) {
       merged = days.map(d => ({ ...d }));
     } else {
-      for (let i = 0; i < merged.length; i++) {
-        const priority = { critical: 3, warn: 2, ok: 1, unknown: 0 };
+      const priority = { critical: 3, warn: 2, ok: 1, unknown: 0 };
+      for (let i = 0; i < merged.length && i < days.length; i++) {
         if ((priority[days[i].status] || 0) > (priority[merged[i].status] || 0)) {
           merged[i].status = days[i].status;
         }
@@ -472,17 +586,91 @@ async function loadI18n() {
   document.title = i18n.dashboard.title;
 }
 
-function renderLogEntry(entry) {
-  const safeSev = escapeHtml(entry.severity);
-  return `<div class="log-entry">
-    <div class="log-entry-header">
-      <span class="log-title sev-${safeSev}">${escapeHtml(entry.title)}</span>
-      <span class="log-source">${escapeHtml(entry.source)}</span>
-    </div>
-    <div class="log-line">${escapeHtml(entry.line)}</div>
-    <div class="log-mitigation">${escapeHtml(entry.mitigation)}</div>
-    <div class="log-time">${new Date(entry.timestamp).toLocaleString()}</div>
-  </div>`;
+// Floor a Date to the nearest 15-minute boundary.
+function floorTo15Min(date) {
+  const d = new Date(date);
+  d.setMinutes(Math.floor(d.getMinutes() / 15) * 15, 0, 0);
+  return d;
+}
+
+// Build a bucket key string for a 15-minute slot: "logs-YYYYMMDD-HHmm"
+function logBucketId(date) {
+  const d = floorTo15Min(date);
+  const pad = n => String(n).padStart(2, '0');
+  return 'logs-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate())
+       + '-' + pad(d.getHours()) + pad(d.getMinutes());
+}
+
+// Timestamps of log groups currently on page (unix seconds of bucket start).
+let logGroupTimestamps = [];
+
+// Returns the height of the sticky metrics section for scroll offset.
+function stickyOffset() {
+  const ms = document.getElementById('metricsSection');
+  return ms ? ms.offsetHeight + 8 : 0;
+}
+
+// Scroll to a log bucket by ID, expand it, and flash highlight.
+function scrollToBucket(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  // Expand the bucket
+  el.classList.add('open');
+  // Scroll so it appears below the sticky graph
+  const y = el.getBoundingClientRect().top + window.scrollY - stickyOffset();
+  window.scrollTo({ top: y, behavior: 'smooth' });
+  // Flash highlight 3 times
+  el.classList.remove('flash');
+  void el.offsetWidth; // force reflow to restart animation
+  el.classList.add('flash');
+  el.addEventListener('animationend', () => el.classList.remove('flash'), { once: true });
+}
+
+// Build the summary chips for a bucket (group entries by title+severity).
+function buildChips(entries) {
+  const map = new Map(); // title -> { severity, source, count }
+  for (const e of entries) {
+    const key = e.title;
+    if (!map.has(key)) map.set(key, { severity: e.severity, source: e.source, count: 0 });
+    map.get(key).count++;
+  }
+  let html = '';
+  for (const [title, info] of map) {
+    html += `<span class="log-chip log-chip-${escapeHtml(info.severity)}">${escapeHtml(info.source)} \u00b7 ${escapeHtml(title)} \u00d7${info.count}</span>`;
+  }
+  return html;
+}
+
+// Build the expanded body for a bucket: entries grouped by error type.
+function buildBucketBody(entries) {
+  const map = new Map(); // title -> { severity, source, mitigation, lines[] }
+  for (const e of entries) {
+    const key = e.title;
+    if (!map.has(key)) map.set(key, { severity: e.severity, source: e.source, mitigation: e.mitigation, lines: [] });
+    map.get(key).lines.push({ line: e.line, time: e.timestamp });
+  }
+  let html = '';
+  for (const [title, info] of map) {
+    const safeSev = escapeHtml(info.severity);
+    const linesId = 'lines-' + Math.random().toString(36).slice(2, 9);
+    html += `<div class="log-type-group">`;
+    html += `<div class="log-type-header">`;
+    html += `<span class="log-type-title sev-${safeSev}">${escapeHtml(title)}</span>`;
+    html += `<span class="log-type-source">${escapeHtml(info.source)}</span>`;
+    html += `</div>`;
+    html += `<div class="log-mitigation">${escapeHtml(info.mitigation)}</div>`;
+    if (info.lines.length > 0) {
+      html += `<div class="log-lines-toggle" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=this.nextElementSibling.classList.contains('open')?'\u25BC Hide ${info.lines.length} log lines':'\u25B6 Show ${info.lines.length} log lines'">\u25B6 Show ${info.lines.length} log lines</div>`;
+      html += `<div class="log-lines-list">`;
+      for (const l of info.lines) {
+        const t = new Date(l.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        html += `<div class="log-line-item"><span class="log-line-time">${escapeHtml(t)}</span>${escapeHtml(l.line)}</div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+  return html;
 }
 
 async function fetchLogs() {
@@ -495,13 +683,47 @@ async function fetchLogs() {
     if (!data.entries || data.entries.length === 0) {
       container.className = 'logs-empty';
       container.innerHTML = escapeHtml(i18n.logs.logs_empty);
+      logGroupTimestamps = [];
+      gScheduleDraw();
       return;
     }
 
     container.className = '';
-    // Show up to 50 most recent entries in the dashboard
-    const entries = data.entries.slice(0, 50);
-    container.innerHTML = entries.map(renderLogEntry).join('');
+    const entries = data.entries.slice(0, 200);
+    const groups = new Map(); // bucketId -> { date, entries[] }
+    for (const e of entries) {
+      const ts = new Date(e.timestamp);
+      const id = logBucketId(ts);
+      if (!groups.has(id)) groups.set(id, { date: floorTo15Min(ts), entries: [] });
+      groups.get(id).entries.push(e);
+    }
+
+    // Remember which buckets are currently expanded so we preserve state.
+    const wasOpen = new Set();
+    container.querySelectorAll('.log-bucket.open').forEach(el => wasOpen.add(el.id));
+
+    let html = '';
+    const timestamps = [];
+    for (const [id, group] of groups) {
+      const endDate = new Date(group.date.getTime() + 15 * 60 * 1000);
+      const timeLabel = group.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      + ' \u2013 '
+                      + endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      timestamps.push(Math.floor(group.date.getTime() / 1000));
+      const openClass = wasOpen.has(id) ? ' open' : '';
+      html += `<div class="log-bucket${openClass}" id="${escapeHtml(id)}">`;
+      html += `<div class="log-bucket-header" onclick="this.parentElement.classList.toggle('open')">`;
+      html += `<span class="log-bucket-arrow">\u25B6</span>`;
+      html += `<span class="log-bucket-time">${escapeHtml(timeLabel)}</span>`;
+      html += `<span class="log-bucket-count">${group.entries.length}</span>`;
+      html += `<div class="log-bucket-chips">${buildChips(group.entries)}</div>`;
+      html += `</div>`;
+      html += `<div class="log-bucket-body">${buildBucketBody(group.entries)}</div>`;
+      html += `</div>`;
+    }
+    container.innerHTML = html;
+    logGroupTimestamps = timestamps;
+    gScheduleDraw();
   } catch (e) {
     // Silently ignore log fetch errors
   }
@@ -549,8 +771,8 @@ async function fetchStatus() {
 // ─────────────────────────────────────────────
 
 // Margins around the plot area (css px)
-const GC = { ML: 48, MR: 16, MT: 14, MB: 38 };
-const GH = 200; // total canvas height (css px)
+const GC = { ML: 48, MR: 16, MT: 14, MB: 52 };
+const GH = 214; // total canvas height (css px)
 
 let allMetricPoints = [];
 let metricsNumCPUs  = 1;
@@ -568,6 +790,18 @@ let gHoverPoint = null;
 let gPinned     = false; // tooltip locked in place by click
 let gTtInside   = false;
 let gRafPending = false;
+let gLogMarkerRects = []; // [{x, y, w, h, ts}] for click hit-testing
+
+// Clamp the view window so gViewEnd never exceeds "now".
+// Preserves the current range width. Returns true if clamping occurred.
+function gClampToNow() {
+  const now = Math.floor(Date.now() / 1000);
+  if (gViewEnd <= now) return false;
+  const rangeS = gViewEnd - gViewStart;
+  gViewEnd   = now;
+  gViewStart = now - rangeS;
+  return true;
+}
 
 function niceIntervalS(targetS) {
   const steps = [30,60,120,300,600,900,1800,3600,7200,21600,43200,86400,172800];
@@ -577,10 +811,20 @@ function niceIntervalS(targetS) {
 
 function gFormatXLabel(ts, rangeS) {
   const d = new Date(ts * 1000);
-  if (rangeS <= 3600)  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  if (rangeS <= 86400) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
-         d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  let local, utc;
+  if (rangeS <= 3600) {
+    local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    utc   = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC' });
+  } else if (rangeS <= 86400) {
+    local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    utc   = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+  } else {
+    local = d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+            d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    utc   = d.toLocaleDateString([], { month: 'short', day: 'numeric', timeZone: 'UTC' }) + ' ' +
+            d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+  }
+  return { local, utc: utc + ' UTC' };
 }
 
 function gSetRange(seconds) {
@@ -725,7 +969,41 @@ function gDraw() {
     const xPx = tsToX(ts);
     if (xPx < GC.ML + 2 || xPx > GC.ML + plotW - 2) continue;
     ctx.beginPath(); ctx.moveTo(xPx, GC.MT + plotH); ctx.lineTo(xPx, GC.MT + plotH + 4); ctx.stroke();
-    ctx.fillText(gFormatXLabel(ts, rangeS), xPx, GC.MT + plotH + 8);
+    const label = gFormatXLabel(ts, rangeS);
+    ctx.fillStyle = '#8b949e';
+    ctx.fillText(label.local, xPx, GC.MT + plotH + 8);
+    ctx.fillStyle = '#484f58';
+    ctx.font = '10px monospace';
+    ctx.fillText(label.utc, xPx, GC.MT + plotH + 22);
+    ctx.font = '11px monospace';
+  }
+
+  // ── Log group markers ──
+  gLogMarkerRects = []; // reset for hit testing
+  if (logGroupTimestamps.length > 0) {
+    for (const ts of logGroupTimestamps) {
+      if (ts < gViewStart || ts > gViewEnd) continue;
+      const x = tsToX(ts);
+      // Vertical marker line
+      ctx.strokeStyle = '#f8514966';
+      ctx.lineWidth   = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(x, GC.MT); ctx.lineTo(x, GC.MT + plotH); ctx.stroke();
+      ctx.setLineDash([]);
+      // Triangle marker at bottom
+      const triY = GC.MT + plotH + 1;
+      const triH = 8;
+      const triW = 6;
+      ctx.fillStyle = '#f85149';
+      ctx.beginPath();
+      ctx.moveTo(x, triY);
+      ctx.lineTo(x - triW, triY + triH);
+      ctx.lineTo(x + triW, triY + triH);
+      ctx.closePath();
+      ctx.fill();
+      // Store rect for click hit-testing (in css px)
+      gLogMarkerRects.push({ x: x - triW - 4, y: triY - 2, w: triW * 2 + 8, h: triH + 6, ts: ts });
+    }
   }
 
   // ── Axis border ──
@@ -789,7 +1067,8 @@ function gUpdateTooltip(mouseX, mouseY, wrapW) {
 
   if (!gTtInside) {
     const loadPct = Math.min(100, (nearest.l / metricsNumCPUs) * 100);
-    document.getElementById('ttTime').textContent  = new Date(nearest.t * 1000).toLocaleString();
+    const ttDate = new Date(nearest.t * 1000);
+    document.getElementById('ttTime').innerHTML = escapeHtml(ttDate.toLocaleString()) + '<br><span style="color:#484f58">' + escapeHtml(ttDate.toLocaleString([], { timeZone: 'UTC' })) + ' UTC</span>';
     document.getElementById('ttMem').textContent   = 'Memory: ' + nearest.m + '%';
     document.getElementById('ttLoad').textContent  = 'Load: ' + loadPct.toFixed(1) + '% (1m avg)';
 
@@ -825,8 +1104,10 @@ function gInitEvents() {
   document.getElementById('ttCopyBtn').addEventListener('click', () => {
     if (!gHoverPoint) return;
     const loadPct = Math.min(100, (gHoverPoint.l / metricsNumCPUs) * 100);
+    const cpDate = new Date(gHoverPoint.t * 1000);
     const text = [
-      'Time: '   + new Date(gHoverPoint.t * 1000).toLocaleString(),
+      'Time: '   + cpDate.toLocaleString(),
+      'UTC:  '   + cpDate.toLocaleString([], { timeZone: 'UTC' }) + ' UTC',
       'Memory: ' + gHoverPoint.m + '%',
       'Load: '   + loadPct.toFixed(1) + '% (1m avg)',
     ].join('\n');
@@ -840,38 +1121,42 @@ function gInitEvents() {
   canvas.addEventListener('mousemove', e => {
     if (gDragging) return;
     const r = wrap.getBoundingClientRect();
-    gUpdateTooltip(e.clientX - r.left, e.clientY - r.top, r.width);
+    const mx = e.clientX - r.left;
+    const my = e.clientY - r.top;
+    // Change cursor over log markers
+    let overMarker = false;
+    for (const m of gLogMarkerRects) {
+      if (mx >= m.x && mx <= m.x + m.w && my >= m.y && my <= m.y + m.h) { overMarker = true; break; }
+    }
+    canvas.style.cursor = overMarker ? 'pointer' : 'crosshair';
+    gUpdateTooltip(mx, my, r.width);
   });
 
   canvas.addEventListener('mouseleave', () => {
     if (!gPinned && !gTtInside) { tooltip.style.display = 'none'; gHoverPoint = null; gScheduleDraw(); }
   });
 
-  // Click to pin tooltip in place so it can be interacted with
-  canvas.addEventListener('click', () => {
+  // Click: check log markers first, then pin tooltip
+  canvas.addEventListener('click', e => {
     if (gDragMoved) return; // was a drag, not a click
+    const r = wrap.getBoundingClientRect();
+    const mx = e.clientX - r.left;
+    const my = e.clientY - r.top;
+    // Check log marker hit
+    for (const m of gLogMarkerRects) {
+      if (mx >= m.x && mx <= m.x + m.w && my >= m.y && my <= m.y + m.h) {
+        const d = floorTo15Min(new Date(m.ts * 1000));
+        scrollToBucket(logBucketId(d));
+        return;
+      }
+    }
+    // Pin tooltip
     if (!gHoverPoint) return;
     gPinned = true;
     tooltip.classList.add('tt-pinned');
     document.getElementById('ttPinHint').style.display = 'none';
     document.getElementById('ttCopyBtn').style.display = '';
   });
-
-  // Scroll → zoom around cursor
-  canvas.addEventListener('wheel', e => {
-    e.preventDefault();
-    const r      = wrap.getBoundingClientRect();
-    const plotW  = r.width - GC.ML - GC.MR;
-    const ratio  = Math.max(0, Math.min(1, (e.clientX - r.left - GC.ML) / plotW));
-    const rangeS = gViewEnd - gViewStart;
-    const mouseTs = gViewStart + ratio * rangeS;
-    const factor  = e.deltaY > 0 ? 1.4 : 1 / 1.4;
-    const newRange = Math.max(60, Math.min(7 * 86400, rangeS * factor));
-    gViewStart = mouseTs - ratio * newRange;
-    gViewEnd   = mouseTs + (1 - ratio) * newRange;
-    gUpdateRangeLabel();
-    gScheduleDraw();
-  }, { passive: false });
 
   // Drag → pan
   canvas.addEventListener('mousedown', e => {
@@ -894,11 +1179,19 @@ function gInitEvents() {
     const dtS   = -(e.clientX - gDragStartX) / plotW * (gDragStartVE - gDragStartVS);
     gViewStart  = gDragStartVS + dtS;
     gViewEnd    = gDragStartVE + dtS;
+    gClampToNow();
     gUpdateRangeLabel();
     gScheduleDraw();
   });
   window.addEventListener('mouseup', () => {
-    if (gDragging) { gDragging = false; canvas.style.cursor = 'crosshair'; }
+    if (!gDragging) return;
+    gDragging = false;
+    canvas.style.cursor = 'crosshair';
+    if (!gDragMoved) return;
+    const now = Math.floor(Date.now() / 1000);
+    // Fetch data covering the visible window without resetting the view
+    const needed = now - Math.floor(gViewStart);
+    if (needed > 0) fetchMetricsRaw(needed);
   });
 
   if (window.ResizeObserver) new ResizeObserver(() => gScheduleDraw()).observe(wrap);
@@ -907,6 +1200,22 @@ function gInitEvents() {
 function setActiveRange(seconds) {
   gSetRange(seconds);
   fetchMetrics(seconds);
+}
+
+// Fetch metrics for a time range without resetting the view window.
+// Used when dragging to load data for the visible area.
+async function fetchMetricsRaw(seconds) {
+  try {
+    const resp = await fetch('/api/metrics?range=' + seconds);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    allMetricPoints = data.points || [];
+    metricsNumCPUs  = data.num_cpus || 1;
+    gUpdateRangeLabel();
+    gScheduleDraw();
+  } catch (e) {
+    // Silently ignore
+  }
 }
 
 async function fetchMetrics(rangeSeconds) {
@@ -920,6 +1229,7 @@ async function fetchMetrics(rangeSeconds) {
     allMetricPoints = data.points || [];
     metricsNumCPUs  = data.num_cpus || 1;
     document.getElementById('metricsSection').style.display = '';
+    updateStickyVar();
     gSetRange(range);
   } catch (e) {
     // Silently ignore
@@ -933,14 +1243,22 @@ document.addEventListener('click', e => {
   if (btn) setActiveRange(Number(btn.dataset.seconds));
 });
 
+// Update the sticky offset CSS variable so scroll-margin-top works.
+function updateStickyVar() {
+  const ms = document.getElementById('metricsSection');
+  if (ms) document.documentElement.style.setProperty('--sticky-h', ms.offsetHeight + 12 + 'px');
+}
+
 // Load translations first, then start polling
 loadI18n().then(() => {
   fetchStatus();
   fetchLogs();
-  fetchMetrics();
+  fetchMetrics().then(updateStickyVar);
   gInitEvents();
   setInterval(fetchStatus, 5000);
-  setInterval(fetchLogs, 10000);
+  setInterval(fetchLogs, 900000);    // refresh logs every 15 minutes
+  setInterval(fetchMetrics, 300000); // refresh metrics every 5 minutes
+  window.addEventListener('resize', updateStickyVar);
 });
 </script>
 </body>

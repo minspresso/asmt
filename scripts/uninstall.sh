@@ -20,6 +20,8 @@ echo "This will remove Server-Stat from this system."
 echo ""
 echo "  Binary:  ${INSTALL_DIR}/serverstat"
 echo "  Config:  ${INSTALL_DIR}/config.yaml"
+echo "  Secrets: ${INSTALL_DIR}/env"
+echo "  Data:    ${INSTALL_DIR}/history/ (metrics, logs, history)"
 echo "  Service: ${SERVICE_NAME}"
 echo ""
 

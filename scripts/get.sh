@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Server-Stat — automated installer
+# asmt — automated installer
 #
 # Downloads the latest release for your architecture, installs the binary,
 # registers a systemd/OpenRC service, and generates a config file.
 #
 # Usage (one-liner):
-#   curl -sSL https://raw.githubusercontent.com/minspresso/Server-Stat/main/scripts/get.sh | sudo bash
+#   curl -sSL https://raw.githubusercontent.com/minspresso/asmt/main/scripts/get.sh | sudo bash
 #
 # Uninstall:
-#   curl -sSL https://raw.githubusercontent.com/minspresso/Server-Stat/main/scripts/uninstall.sh | sudo bash
+#   curl -sSL https://raw.githubusercontent.com/minspresso/asmt/main/scripts/uninstall.sh | sudo bash
 #
 # Supports: Debian, Ubuntu, RHEL, CentOS, Rocky, Fedora, Arch, Alpine, openSUSE
 set -euo pipefail
 
-REPO="minspresso/Server-Stat"
+REPO="minspresso/asmt"
 BINARY_NAME="serverstat"
 
 RED='\033[0;31m'

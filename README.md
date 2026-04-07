@@ -1,4 +1,4 @@
-# Server-Stat
+# ASMT - Another Server Monitoring Tool
 
 A lightweight server monitoring tool built in Go. Single static binary (~9 MB), zero runtime dependencies, ~11 MB RSS. Auto-detects services and works across major Linux distributions.
 
@@ -47,7 +47,7 @@ Supports log alerting, webhook (POST JSON), and email (SMTP) on status transitio
 Run this one-liner on your server. It auto-detects your CPU architecture, fetches the latest release, and installs everything:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/minspresso/Server-Stat/main/scripts/get.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/minspresso/asmt/main/scripts/get.sh | sudo bash
 ```
 
 That's it. The installer:
@@ -65,8 +65,11 @@ After installing:
 # Edit the config
 sudo nano /opt/serverstat/config.yaml
 
-# Set secrets as environment variables (never hardcode in config)
-export MARIADB_DSN='monitor:password@tcp(127.0.0.1:3306)/mysql'
+# Set secrets in the environment file (persists across reboots, chmod 600)
+sudo nano /opt/serverstat/env
+# Example contents:
+#   MARIADB_DSN=monitor:password@tcp(127.0.0.1:3306)/mysql
+#   REDIS_PASSWORD=secret
 
 # Start the service (systemd)
 sudo systemctl enable --now serverstat
@@ -75,6 +78,8 @@ sudo systemctl enable --now serverstat
 sudo rc-update add serverstat default
 sudo rc-service serverstat start
 ```
+
+Secrets use `${ENV_VAR}` expansion in `config.yaml`. The environment file at `/opt/serverstat/env` is loaded by systemd via `EnvironmentFile=` — values persist across reboots. The file is created with `chmod 600` (root-only readable).
 
 Dashboard is at `http://localhost:8080` (localhost only by default).
 
@@ -116,7 +121,7 @@ ssh user@server 'sudo bash install.sh'
 
 ```bash
 # If installed via one-liner
-curl -sSL https://raw.githubusercontent.com/minspresso/Server-Stat/main/scripts/uninstall.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/minspresso/asmt/main/scripts/uninstall.sh | sudo bash
 
 # If installed from source (interactive)
 sudo bash scripts/uninstall.sh
@@ -136,7 +141,7 @@ Removes the binary, config, and service files from the system.
 
 The config file lives at `/opt/serverstat/config.yaml` after install. A reference copy is in `config.yaml` at the root of this repo.
 
-Sensitive values use `${ENV_VAR}` expansion — never hardcode secrets:
+Sensitive values use `${ENV_VAR}` expansion — never hardcode secrets in `config.yaml`:
 
 ```yaml
 mariadb:
@@ -147,6 +152,16 @@ alerts:
   webhook:
     url: "${WEBHOOK_URL}"
 ```
+
+Define the actual values in `/opt/serverstat/env` (one `KEY=value` per line, no quotes needed):
+
+```bash
+MARIADB_DSN=monitor:password@tcp(127.0.0.1:3306)/mysql
+REDIS_PASSWORD=secret
+WEBHOOK_URL=https://hooks.example.com/alert
+```
+
+This file is loaded by systemd on every service start and persists across reboots. After editing, restart: `sudo systemctl restart serverstat`.
 
 Set language to `"en"` (English, default) or `"ko"` (Korean).
 

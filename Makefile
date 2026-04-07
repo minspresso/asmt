@@ -39,7 +39,12 @@ dist: build
 	cp config.yaml README.md /tmp/$(DIST_NAME)/
 	tar -czf $(DIST_NAME).tar.gz -C /tmp $(DIST_NAME)
 	rm -rf /tmp/$(DIST_NAME)
+	# Emit a checksum file so the one-liner installer (get.sh) can verify
+	# the downloaded archive against a known-good hash. Upload both files
+	# to the GitHub release.
+	sha256sum $(DIST_NAME).tar.gz > $(DIST_NAME).tar.gz.sha256
 	@echo "Created: $(DIST_NAME).tar.gz"
+	@echo "Created: $(DIST_NAME).tar.gz.sha256"
 
 # Install on the local server (uses pre-built binary or builds from source)
 install:

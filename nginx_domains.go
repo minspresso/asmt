@@ -6,12 +6,27 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"io"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
+
+// readConfigSafely opens a file with O_NOFOLLOW so symlinks are not
+// followed, then reads up to maxSize bytes. Refusing to follow symlinks
+// prevents a local attacker who gains write access to /etc/nginx/ from
+// pointing a "config file" at /etc/shadow or similar sensitive paths.
+func readConfigSafely(path string, maxSize int64) ([]byte, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(io.LimitReader(f, maxSize))
+}
 
 // nginxDomains returns domains from nginx config files that listen on 443/ssl.
 // It reads config files directly from /etc/nginx/ to avoid issues with
@@ -33,8 +48,12 @@ func nginxDomains() []string {
 		paths = append(paths, matches...)
 	}
 
+	// Per-file read cap — nginx configs are small text files; anything
+	// above this limit is almost certainly malicious or broken.
+	const maxConfigSize = 2 * 1024 * 1024 // 2 MB
+
 	for _, p := range paths {
-		data, err := os.ReadFile(p)
+		data, err := readConfigSafely(p, maxConfigSize)
 		if err != nil {
 			continue
 		}

@@ -57,6 +57,9 @@ func (c *SSLChecker) checkDomain(ctx context.Context, host string) CheckResult {
 			CheckedAt: time.Now(),
 		}
 	}
+	// TLS handshake. Setting ServerName enables SNI AND triggers Go's
+	// built-in hostname verification against the certificate, which is
+	// exactly what we want for a certificate-expiry monitor.
 	tlsConn := tls.Client(rawConn, &tls.Config{ServerName: host})
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		rawConn.Close()
@@ -67,18 +70,9 @@ func (c *SSLChecker) checkDomain(ctx context.Context, host string) CheckResult {
 			CheckedAt: time.Now(),
 		}
 	}
-	conn := tlsConn
-	if err != nil {
-		return CheckResult{
-			Component: component,
-			Status:    StatusCritical,
-			Message:   fmt.Sprintf("TLS connection failed: %s", err.Error()),
-			CheckedAt: time.Now(),
-		}
-	}
-	defer conn.Close()
+	defer tlsConn.Close()
 
-	certs := conn.ConnectionState().PeerCertificates
+	certs := tlsConn.ConnectionState().PeerCertificates
 	if len(certs) == 0 {
 		return CheckResult{
 			Component: component,

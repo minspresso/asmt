@@ -1,0 +1,39 @@
+# golangci-lint configuration for asmt.
+# Goal: catch bugs and security issues without excessive stylistic nagging.
+
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck        # unchecked errors
+    - gosec           # security patterns
+    - govet           # Go's built-in vet
+    - ineffassign     # unused assignments
+    - staticcheck     # comprehensive bug checks
+    - unused          # unused code
+    - gosimple        # simplifications
+    - typecheck       # Go type checker
+
+linters-settings:
+  gosec:
+    excludes:
+      # G104 (errors unhandled) is handled by errcheck with better context.
+      - G104
+      # G204 (subprocess with variable): we audit exec.CommandContext
+      # callers manually; gosec flags every use which is too noisy.
+      - G204
+      # G304 (file inclusion via variable): we read from operator-controlled
+      # config paths; audited manually.
+      - G304
+
+issues:
+  exclude-rules:
+    # Log watchers and checkers use the same file-read pattern; allow it.
+    - path: logwatch\.go
+      linters:
+        - gosec
+    - path: nginx_domains\.go
+      linters:
+        - gosec

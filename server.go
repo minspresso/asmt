@@ -55,12 +55,42 @@ type checkResultJSON struct {
 }
 
 // securityHeaders adds common security headers to responses.
+//
+// CSP rationale: the dashboard is a single-page app that uses inline
+// <script> blocks and inline onclick handlers for simplicity (no build
+// step, no separate JS file). That means 'unsafe-inline' must be
+// allowed in script-src. We still lock down every other directive:
+//
+//   default-src 'self'      — block loads from any other origin
+//   script-src 'self' 'unsafe-inline' — our own inline scripts, no CDNs
+//   style-src 'self' 'unsafe-inline'  — our own inline styles, no external CSS
+//   img-src 'self' data:    — inline data URIs only (no tracking pixels)
+//   connect-src 'self'      — fetch/XHR only to our own origin
+//   object-src 'none'       — block <object>, <embed>, Flash
+//   base-uri 'self'         — prevent <base href> hijacks
+//   form-action 'none'      — no form submissions
+//   frame-ancestors 'none'  — redundant with X-Frame-Options
+//
+// This policy would break if the dashboard ever tried to embed a
+// CDN-hosted library; that's intentional. Everything ships in the
+// binary.
+const contentSecurityPolicy = "default-src 'self'; " +
+	"script-src 'self' 'unsafe-inline'; " +
+	"style-src 'self' 'unsafe-inline'; " +
+	"img-src 'self' data:; " +
+	"connect-src 'self'; " +
+	"object-src 'none'; " +
+	"base-uri 'self'; " +
+	"form-action 'none'; " +
+	"frame-ancestors 'none'"
+
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-XSS-Protection", "0")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
 		next.ServeHTTP(w, r)
 	})
 }

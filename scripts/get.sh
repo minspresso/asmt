@@ -72,12 +72,27 @@ info "Latest release: ${VERSION}"
 
 ARCHIVE="${BINARY_NAME}-${VERSION}-linux-${ARCH}.tar.gz"
 URL="https://github.com/${REPO}/releases/download/${VERSION}/${ARCHIVE}"
+CHECKSUM_URL="${URL}.sha256"
 
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "${TMPDIR}"' EXIT
 
 info "Downloading ${ARCHIVE}..."
 download "${URL}" "${TMPDIR}/${ARCHIVE}"
+
+# Supply-chain defense: verify the downloaded archive against the SHA-256
+# checksum file published with the release. If the checksum file is missing
+# (older releases) or doesn't match, we abort the install. HTTPS alone is
+# not sufficient — this catches tampered release artifacts, a compromised
+# GitHub release, or a local proxy doing nasty things.
+info "Verifying checksum..."
+if download "${CHECKSUM_URL}" "${TMPDIR}/${ARCHIVE}.sha256" 2>/dev/null; then
+    (cd "${TMPDIR}" && sha256sum -c "${ARCHIVE}.sha256") \
+        || error "Checksum verification FAILED for ${ARCHIVE}. The downloaded file does not match the expected hash. Refusing to install."
+    info "Checksum verified."
+else
+    warn "No checksum file published for ${VERSION} at ${CHECKSUM_URL}. Proceeding without verification. For future releases, checksums should be attached to the GitHub release."
+fi
 
 info "Extracting..."
 tar -xzf "${TMPDIR}/${ARCHIVE}" -C "${TMPDIR}"

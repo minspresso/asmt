@@ -12,7 +12,7 @@ status:
   unhealthy: "Unhealthy"
 
 dashboard:
-  title: "Server-Stat"
+  title: "ASMT - Another Server Monitoring Tool"
   last_updated: "Last updated"
   loading: "Loading status data..."
   no_checks: "No checks configured"

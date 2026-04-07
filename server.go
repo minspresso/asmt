@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	_ "embed"
@@ -116,16 +117,40 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+// maxRangeSeconds clamps untrusted ?range= values to our 7-day retention
+// window. Anything longer is pointless (we don't keep older data) and
+// anything larger than int32 risks time.Duration overflow.
+const maxRangeSeconds = 7 * 24 * 3600
+
+// parseRangeSeconds strictly parses a ?range=<integer-seconds> parameter.
+// Returns (seconds, ok). Rejects:
+//   - non-numeric input (no trailing garbage like "1abc")
+//   - negative values
+//   - zero
+//   - values exceeding the 7-day retention window
+//
+// Uses strconv.Atoi (stricter than fmt.Sscanf which accepts trailing text).
+func parseRangeSeconds(s string) (int, bool) {
+	if s == "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	if n > maxRangeSeconds {
+		n = maxRangeSeconds
+	}
+	return n, true
+}
+
 // handleMetrics returns metric points for the requested range.
 // ?range=<seconds> — filters to the last N seconds at full resolution.
 // Omitting range returns the full 7-day buffer sampled to 2016 points.
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	var points []MetricPoint
-	if rangeStr := r.URL.Query().Get("range"); rangeStr != "" {
-		var secs int
-		if _, err := fmt.Sscanf(rangeStr, "%d", &secs); err == nil && secs > 0 {
-			points = s.scheduler.GetMetricsSince(time.Duration(secs)*time.Second, 2016)
-		}
+	if secs, ok := parseRangeSeconds(r.URL.Query().Get("range")); ok {
+		points = s.scheduler.GetMetricsSince(time.Duration(secs)*time.Second, 2016)
 	}
 	if points == nil {
 		points = s.scheduler.GetMetrics(2016)
@@ -184,11 +209,8 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var entries []LogEntry
-	if rangeStr := r.URL.Query().Get("range"); rangeStr != "" {
-		var secs int
-		if _, err := fmt.Sscanf(rangeStr, "%d", &secs); err == nil && secs > 0 {
-			entries = s.logWatcher.GetEntriesSince(time.Duration(secs) * time.Second)
-		}
+	if secs, ok := parseRangeSeconds(r.URL.Query().Get("range")); ok {
+		entries = s.logWatcher.GetEntriesSince(time.Duration(secs) * time.Second)
 	}
 	if entries == nil {
 		entries = s.logWatcher.GetEntries()
@@ -220,23 +242,30 @@ func (s *Server) handleSyncRun(w http.ResponseWriter, r *http.Request) {
 	if s.syncer == nil || !s.syncer.Enabled() {
 		w.WriteHeader(http.StatusNotImplemented)
 		json.NewEncoder(w).Encode(map[string]any{
-			"error": "journalctl is not available on this system",
+			"error": "sync unavailable",
 		})
 		return
 	}
 
 	result, err := s.syncer.Sync(r.Context())
 	if err != nil {
+		// Never leak raw err.Error() to HTTP clients — it may contain
+		// file paths, subprocess details, DB DSNs, or other internal
+		// state. Log the full error server-side, return a short
+		// category label to the client.
+		var status int
+		var msg string
 		switch err {
 		case ErrSyncInProgress:
-			w.WriteHeader(http.StatusConflict)
+			status, msg = http.StatusConflict, "sync already in progress"
 		case ErrJournalctlUnavailable:
-			w.WriteHeader(http.StatusNotImplemented)
+			status, msg = http.StatusNotImplemented, "sync unavailable"
 		default:
-			w.WriteHeader(http.StatusInternalServerError)
+			status, msg = http.StatusInternalServerError, "sync failed"
 			s.logger.Warn("sync failed", "error", err)
 		}
-		json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
+		w.WriteHeader(status)
+		json.NewEncoder(w).Encode(map[string]any{"error": msg})
 		return
 	}
 	json.NewEncoder(w).Encode(result)
@@ -273,11 +302,16 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache, no-store")
+	// Use json.NewEncoder to correctly escape any characters in the
+	// translated status string. Hand-concatenating JSON with raw i18n
+	// values would be fragile if a translator ever introduced a quote
+	// or control character.
+	var status string
 	if passing {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"` + s.tr.T("status.healthy") + `"}`))
+		status = s.tr.T("status.healthy")
 	} else {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte(`{"status":"` + s.tr.T("status.unhealthy") + `"}`))
+		status = s.tr.T("status.unhealthy")
 	}
+	json.NewEncoder(w).Encode(map[string]string{"status": status})
 }

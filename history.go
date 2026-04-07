@@ -141,8 +141,15 @@ func (hs *HistoryStore) Load() map[string][]HistoryDay {
 // Save atomically writes today's component statuses to disk.
 // Components with no data yet (status "unknown") are omitted.
 // Called after every check cycle — safe to call frequently.
+//
+// Data files are written with mode 0640 and the parent directory with
+// mode 0750: root (owner) can read/write, members of the root group
+// can read, everyone else is denied. These files contain machine ID,
+// the list of installed services, and daily status rollups — not
+// catastrophic to leak, but there's no reason for unprivileged users
+// on a multi-user system to read them.
 func (hs *HistoryStore) Save(history map[string][]HistoryDay) error {
-	if err := os.MkdirAll(hs.dir, 0755); err != nil {
+	if err := os.MkdirAll(hs.dir, 0750); err != nil {
 		return err
 	}
 
@@ -176,7 +183,7 @@ func (hs *HistoryStore) Save(history map[string][]HistoryDay) error {
 	// Atomic write: temp file + rename to avoid partial reads.
 	path := filepath.Join(hs.dir, today+".json")
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	if err := os.WriteFile(tmp, data, 0640); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)

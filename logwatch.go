@@ -704,7 +704,9 @@ func (lw *LogWatcher) saveLogs() {
 	}
 	lw.saveMu.Lock()
 	defer lw.saveMu.Unlock()
-	if err := os.MkdirAll(lw.store.dir, 0755); err != nil {
+	// 0750 dir, 0640 file — log entries may contain sample lines from
+	// /var/log files that are typically root-readable only.
+	if err := os.MkdirAll(lw.store.dir, 0750); err != nil {
 		return
 	}
 
@@ -725,7 +727,7 @@ func (lw *LogWatcher) saveLogs() {
 	today := todayStart.Format("2006-01-02")
 	path := filepath.Join(lw.store.dir, "logs-"+today+".json")
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	if err := os.WriteFile(tmp, data, 0640); err != nil {
 		return
 	}
 	os.Rename(tmp, path)

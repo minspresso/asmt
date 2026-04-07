@@ -58,6 +58,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os/exec"
 	"regexp"
 	"runtime"
@@ -102,17 +103,24 @@ const (
 )
 
 // SyncResult is returned from every Sync call for display/logging.
+//
+// Error handling note: the Errors slice contains only high-level labels
+// ("chunk 1 failed"), never raw subprocess output or paths. Full error
+// details are logged server-side via the application logger. This prevents
+// leaking internal paths, subprocess output, or exec details through the
+// HTTP API.
 type SyncResult struct {
 	StartedAt    time.Time `json:"started_at"`
 	CompletedAt  time.Time `json:"completed_at"`
 	FromTime     time.Time `json:"from"`
 	ToTime       time.Time `json:"to"`
 	ChunksRun    int       `json:"chunks"`
+	ChunksFailed int       `json:"chunks_failed,omitempty"`
 	LinesParsed  int       `json:"lines_parsed"`
 	EventsAdded  int       `json:"events_added"` // events fed into AddEvent
 	BufferAfter  int       `json:"buffer_after"` // buffer len after sync
 	SubprocCalls int       `json:"subproc_calls"`
-	Errors       []string  `json:"errors,omitempty"`
+	Errors       []string  `json:"errors,omitempty"` // safe high-level labels only
 }
 
 // Syncer pulls from authoritative log sources (systemd journal) and
@@ -120,6 +128,7 @@ type SyncResult struct {
 type Syncer struct {
 	buffer  *logBuffer
 	enabled bool // false if journalctl is unavailable
+	logger  *slog.Logger
 
 	// single-flight guard: only one Sync runs at a time. Concurrent
 	// callers get ErrSyncInProgress, which keeps memory bounded under
@@ -134,12 +143,17 @@ type Syncer struct {
 }
 
 // NewSyncer checks for journalctl and returns a ready Syncer.
-// Safe for concurrent use.
-func NewSyncer(buf *logBuffer) *Syncer {
+// Safe for concurrent use. The logger is used for detailed internal error
+// logging; HTTP responses never include raw error text.
+func NewSyncer(buf *logBuffer, logger *slog.Logger) *Syncer {
 	_, err := exec.LookPath("journalctl")
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &Syncer{
 		buffer:  buf,
 		enabled: err == nil,
+		logger:  logger,
 	}
 }
 
@@ -215,7 +229,16 @@ func (s *Syncer) Sync(ctx context.Context) (*SyncResult, error) {
 		}
 		res.ChunksRun++
 		if err := s.syncChunk(ctx, chunkStart, chunkEnd, res); err != nil {
-			res.Errors = append(res.Errors, fmt.Sprintf("chunk %s: %v", chunkStart.Format(time.RFC3339), err))
+			// Log full error detail server-side; surface only a safe
+			// label via the HTTP response to avoid leaking paths,
+			// subprocess output, or exec details.
+			res.ChunksFailed++
+			res.Errors = append(res.Errors,
+				fmt.Sprintf("chunk %d failed", res.ChunksRun))
+			s.logger.Warn("sync chunk failed",
+				"chunk_index", res.ChunksRun,
+				"chunk_start", chunkStart.Format(time.RFC3339),
+				"error", err)
 			// Don't abort — continue with remaining chunks so partial
 			// data is better than nothing.
 		}

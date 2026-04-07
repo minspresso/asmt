@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -214,7 +215,7 @@ func main() {
 	// disabled and the API handler returns 501.
 	var syncer *Syncer
 	if logWatcher != nil {
-		syncer = NewSyncer(logWatcher.buffer)
+		syncer = NewSyncer(logWatcher.buffer, logger)
 		if syncer.Enabled() {
 			logger.Info("syncer ready (journalctl available)")
 			// Initial sync on startup: catches up any history the real-time
@@ -263,15 +264,34 @@ func main() {
 		}
 	}
 
+	// Loud warning if the tool is configured to listen on a non-loopback
+	// address. asmt has NO built-in authentication; operators who bind
+	// outside 127.0.0.1 must put a reverse proxy with auth in front of it.
+	// We can't refuse to start — some operators intentionally expose via a
+	// trusted private network — but we make absolutely sure the operator
+	// knows what they're doing.
+	if !isLoopbackBind(cfg.Server.Address) {
+		logger.Warn("LISTENING ON NON-LOOPBACK ADDRESS WITHOUT BUILT-IN AUTHENTICATION",
+			"address", cfg.Server.Address,
+			"risk", "any client on the network can reach the dashboard and trigger syncs",
+			"mitigation", "put an authenticating reverse proxy in front, or rebind to 127.0.0.1:8080",
+		)
+	}
+
 	// Start HTTP server
 	srv := NewServer(scheduler, logWatcher, syncer, cfg, logger, tr)
 	httpServer := &http.Server{
-		Addr:        cfg.Server.Address,
-		Handler:     srv.Handler(),
-		ReadTimeout: 5 * time.Second,
-		// WriteTimeout must exceed investigateTimeout (15s) so the
-		// /api/investigate endpoint can finish running journalctl and
-		// still deliver its response. Normal endpoints complete in ms.
+		Addr:    cfg.Server.Address,
+		Handler: srv.Handler(),
+		// ReadHeaderTimeout defends against Slowloris header attacks: even if
+		// the client trickles headers one byte at a time, they must complete
+		// the header block within this window or be disconnected.
+		ReadHeaderTimeout: 5 * time.Second,
+		// ReadTimeout covers the total read (headers + body).
+		ReadTimeout: 10 * time.Second,
+		// WriteTimeout must exceed syncSubprocessTimeout (15s) so POST /api/sync
+		// can finish running journalctl and still deliver its response.
+		// Normal endpoints complete in milliseconds.
 		WriteTimeout: 25 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
@@ -352,6 +372,29 @@ func sslDomains(cfg *Config) []string {
 	}
 
 	return out
+}
+
+// isLoopbackBind returns true if the configured address is a loopback
+// interface. Accepts: "127.0.0.1:8080", "localhost:8080", "[::1]:8080",
+// and any host:port whose host resolves to a loopback literal.
+// Returns false for "0.0.0.0", empty host (all interfaces), or external IPs.
+func isLoopbackBind(addr string) bool {
+	// Split host:port; if parsing fails, treat as non-loopback (safe default).
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback()
 }
 
 // guessLogSource infers the service name from a log file path.

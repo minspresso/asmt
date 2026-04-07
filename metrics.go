@@ -132,7 +132,8 @@ func (mb *MetricsBuffer) saveToday(points []MetricPoint) {
 	if mb.store == nil || len(points) == 0 {
 		return
 	}
-	if err := os.MkdirAll(mb.store.dir, 0755); err != nil {
+	// 0750 dir, 0640 file — same rationale as HistoryStore.Save.
+	if err := os.MkdirAll(mb.store.dir, 0750); err != nil {
 		return
 	}
 	today := time.Now().UTC().Format("2006-01-02")
@@ -146,7 +147,7 @@ func (mb *MetricsBuffer) saveToday(points []MetricPoint) {
 	if err != nil {
 		return
 	}
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	if err := os.WriteFile(tmp, data, 0640); err != nil {
 		return
 	}
 	os.Rename(tmp, path)

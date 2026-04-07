@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Server-Stat</title>
+<title>ASMT - Another Server Monitoring Tool</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -428,7 +428,7 @@
 </head>
 <body>
   <div class="header">
-    <h1 id="title">Server-Stat</h1>
+    <h1 id="title">ASMT - Another Server Monitoring Tool</h1>
     <div style="display:flex;align-items:center;gap:12px">
       <button id="syncBtn" class="sync-btn" onclick="runSync()" title="Pull from authoritative sources (systemd journal) and rebuild the log timeline">
         <span class="sync-icon">&#8635;</span>
@@ -500,7 +500,7 @@ const COMPONENT_ORDER = ['loadbalancer', 'linux', 'firewall', 'nginx', 'apache',
 // i18n strings (loaded from /api/i18n, with English fallbacks)
 let i18n = {
   dashboard: {
-    title: 'Server-Stat',
+    title: 'ASMT - Another Server Monitoring Tool',
     last_updated: 'Last updated',
     loading: 'Loading status data...',
     no_checks: 'No checks configured',

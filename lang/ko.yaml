@@ -12,7 +12,7 @@ status:
   unhealthy: "비정상"
 
 dashboard:
-  title: "서버 상태"
+  title: "ASMT - 또 다른 서버 모니터링 도구"
   last_updated: "마지막 업데이트"
   loading: "상태 데이터 로드 중..."
   no_checks: "설정된 점검 항목 없음"

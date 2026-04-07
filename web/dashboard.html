@@ -30,6 +30,25 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
+  .sync-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #8b949e;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .sync-btn:hover:not(:disabled) { border-color: #58a6ff; color: #58a6ff; }
+  .sync-btn:disabled { opacity: 0.6; cursor: wait; }
+  .sync-btn.syncing .sync-icon { display: inline-block; animation: spin 1s linear infinite; }
+  .sync-icon { font-size: 14px; }
+
   .status-ok { background: #0d4429; color: #3fb950; }
   .status-warn { background: #4a3000; color: #d29922; }
   .status-critical { background: #5a1a1a; color: #f85149; }
@@ -214,6 +233,17 @@
     float: right;
     margin-left: 8px;
   }
+  .log-observe-note {
+    font-size: 11px;
+    color: #d29922;
+    background: #4a300033;
+    border-left: 2px solid #d29922;
+    padding: 6px 10px;
+    margin-top: 8px;
+    border-radius: 3px;
+    line-height: 1.5;
+  }
+  .log-observe-note strong { color: #f0c674; }
 
   /* Highlight flash for bucket clicked from graph */
   @keyframes bucket-flash {
@@ -223,6 +253,8 @@
     75% { border-color: #58a6ff; box-shadow: 0 0 12px #58a6ff33; }
   }
   .log-bucket.flash { animation: bucket-flash 1.5s ease; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   /* Floating navigation buttons */
   .float-nav {
@@ -273,10 +305,12 @@
     height: 18px;
     border-radius: 3px;
     cursor: default;
-    transition: opacity 0.15s;
+    transition: opacity 0.15s, transform 0.15s;
     position: relative;
   }
   .history-day:hover { opacity: 0.75; }
+  .history-day.hday-click { cursor: pointer; }
+  .history-day.hday-click:hover { transform: translateY(-1px); opacity: 0.85; }
   .hday-ok       { background: #3fb950; }
   .hday-warn     { background: #d29922; }
   .hday-critical { background: #f85149; }
@@ -395,10 +429,19 @@
 <body>
   <div class="header">
     <h1 id="title">Server-Stat</h1>
-    <span id="overall" class="overall-badge status-unknown">...</span>
+    <div style="display:flex;align-items:center;gap:12px">
+      <button id="syncBtn" class="sync-btn" onclick="runSync()" title="Pull from authoritative sources (systemd journal) and rebuild the log timeline">
+        <span class="sync-icon">&#8635;</span>
+        <span id="syncLabel">Sync</span>
+      </button>
+      <span id="overall" class="overall-badge status-unknown">...</span>
+    </div>
   </div>
   <div id="error" class="error-banner"></div>
-  <div class="meta"><span id="lastUpdateLabel">Last updated</span>: <span id="lastUpdate">-</span></div>
+  <div class="meta">
+    <span id="lastUpdateLabel">Last updated</span>: <span id="lastUpdate">-</span>
+    <span id="syncStatus" style="margin-left:12px;color:#484f58"></span>
+  </div>
   <div id="grid" class="grid">
     <div class="loading" id="loadingText">Loading status data...</div>
   </div>
@@ -510,35 +553,166 @@ function statusLabel(status) {
 function renderHistoryBar(checks, history) {
   // Collect all component names for this card, look up their history days
   const componentNames = checks.map(c => c.component);
-  // Merge: for each day slot, take the worst status across all components in this card
+  // Merge: for each day slot, take the worst status across all components,
+  // AND track which components contributed each non-OK status for tooltips.
+  const priority = { critical: 3, warn: 2, ok: 1, unknown: 0 };
   let merged = null;
+  // detailsByDay[dateIdx] = { critical: [components], warn: [components] }
+  let detailsByDay = null;
+
   for (const name of componentNames) {
     const days = history[name];
     if (!days) continue;
     if (!merged) {
       merged = days.map(d => ({ ...d }));
-    } else {
-      const priority = { critical: 3, warn: 2, ok: 1, unknown: 0 };
-      for (let i = 0; i < merged.length && i < days.length; i++) {
-        if ((priority[days[i].status] || 0) > (priority[merged[i].status] || 0)) {
-          merged[i].status = days[i].status;
-        }
+      detailsByDay = days.map(() => ({ critical: [], warn: [] }));
+    }
+    for (let i = 0; i < merged.length && i < days.length; i++) {
+      const s = days[i].status;
+      if ((priority[s] || 0) > (priority[merged[i].status] || 0)) {
+        merged[i].status = s;
       }
+      if (s === 'critical') detailsByDay[i].critical.push(name);
+      else if (s === 'warn') detailsByDay[i].warn.push(name);
     }
   }
   if (!merged) return '';
 
   const dayLabels = { ok: 'OK', warn: 'Warning', critical: 'Critical', unknown: 'No data' };
-  let bars = merged.map(d => {
+  let bars = merged.map((d, i) => {
     const safeStatus = escapeHtml(d.status);
-    const label = escapeHtml(d.date + ': ' + (dayLabels[d.status] || d.status));
-    return `<div class="history-day hday-${safeStatus}" title="${label}"></div>`;
+    const det = detailsByDay[i];
+    // Build a detailed tooltip. Explicit about provenance: this is what
+    // WE recorded from checks, not what the OS log says.
+    let label = d.date + ' (UTC) — ' + (dayLabels[d.status] || d.status);
+    if (det.critical.length > 0) label += '\nCritical: ' + det.critical.join(', ');
+    if (det.warn.length > 0)     label += '\nWarn: ' + det.warn.join(', ');
+    if (det.critical.length > 0 || det.warn.length > 0) {
+      label += '\n\nSource: periodic checks. Click to see investigate commands.';
+    }
+    const clickable = (d.status === 'warn' || d.status === 'critical') ? ' hday-click' : '';
+    return `<div class="history-day hday-${safeStatus}${clickable}" title="${escapeHtml(label)}" data-date="${escapeHtml(d.date)}"></div>`;
   }).join('');
 
   return `<div class="history-bar">
-    <div class="history-label">7-day history</div>
+    <div class="history-label" title="Based on periodic checks, not on authoritative OS logs. Click a block to investigate.">7-day history <span style="color:#484f58">(click for details)</span></div>
     <div class="history-days">${bars}</div>
   </div>`;
+}
+
+// Jump to the last log bucket on the given UTC date (YYYY-MM-DD).
+// The background sync has already pulled authoritative data into the
+// buffer, so if there's nothing to jump to, there really is nothing
+// for that day. We just smoothly scroll to the logs section in that case.
+function jumpToLogsForDay(date) {
+  const target = findBucketForDay(date);
+  if (target) {
+    scrollToBucket(target.id);
+    return;
+  }
+  // Nothing for this day. Scroll to logs section without a modal —
+  // the sync button handles the "go fetch from the source of truth" flow.
+  const logsSection = document.querySelector('.logs-section');
+  if (logsSection) {
+    const y = logsSection.getBoundingClientRect().top + window.scrollY - stickyOffset();
+    window.scrollTo({ top: y, behavior: 'smooth' });
+  }
+}
+
+// Return the LAST (newest) log-bucket element for the given UTC date,
+// or null if none exists. Used for scroll targeting.
+function findBucketForDay(date) {
+  const prefix = 'logs-' + date.replace(/-/g, '') + '-';
+  const buckets = document.querySelectorAll('.log-bucket');
+  let target = null;
+  for (const b of buckets) {
+    if (b.id.startsWith(prefix)) target = b;
+  }
+  return target;
+}
+
+// Trigger a manual sync. Pulls from authoritative sources (systemd journal)
+// and rebuilds the log timeline. Single-flight on the server — concurrent
+// clicks get a 409 Conflict, which we display as "already running".
+async function runSync() {
+  const btn = document.getElementById('syncBtn');
+  const label = document.getElementById('syncLabel');
+  const statusEl = document.getElementById('syncStatus');
+  btn.disabled = true;
+  btn.classList.add('syncing');
+  label.textContent = 'Syncing…';
+  try {
+    const resp = await fetch('/api/sync', { method: 'POST' });
+    if (resp.status === 501) {
+      statusEl.textContent = 'Sync unavailable (journalctl not installed)';
+      statusEl.style.color = '#d29922';
+      return;
+    }
+    if (resp.status === 409) {
+      statusEl.textContent = 'Sync already running';
+      statusEl.style.color = '#d29922';
+      return;
+    }
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      statusEl.textContent = 'Sync failed: ' + (body.error || ('HTTP ' + resp.status));
+      statusEl.style.color = '#f85149';
+      return;
+    }
+    const result = await resp.json();
+    statusEl.textContent = `Synced: ${result.events_added.toLocaleString()} events from ${result.chunks} chunks`;
+    statusEl.style.color = '#3fb950';
+    // Refresh the logs view so new entries appear.
+    await fetchLogs();
+  } catch (e) {
+    statusEl.textContent = 'Sync error: ' + e.message;
+    statusEl.style.color = '#f85149';
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('syncing');
+    label.textContent = 'Sync';
+    // Clear the status message after a few seconds.
+    setTimeout(() => {
+      if (statusEl.textContent.startsWith('Synced')) {
+        statusEl.textContent = '';
+      }
+    }, 5000);
+  }
+}
+
+// Fetch current sync status from /api/sync (GET) and show the
+// "last synced X ago" indicator in the header.
+async function refreshSyncStatus() {
+  try {
+    const resp = await fetch('/api/sync');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const statusEl = document.getElementById('syncStatus');
+    if (!data.enabled) {
+      statusEl.textContent = '';
+      return;
+    }
+    if (data.in_flight) {
+      statusEl.textContent = 'Syncing…';
+      statusEl.style.color = '#58a6ff';
+      return;
+    }
+    if (data.last_sync) {
+      const last = new Date(data.last_sync);
+      const ago = Math.round((Date.now() - last.getTime()) / 1000);
+      let agoStr;
+      if (ago < 60) agoStr = ago + 's ago';
+      else if (ago < 3600) agoStr = Math.round(ago / 60) + 'm ago';
+      else agoStr = Math.round(ago / 3600) + 'h ago';
+      // Don't overwrite a recent transient message (e.g., "Synced: ...")
+      if (!statusEl.textContent || statusEl.textContent.startsWith('Last sync')) {
+        statusEl.textContent = 'Last sync ' + agoStr;
+        statusEl.style.color = '#484f58';
+      }
+    }
+  } catch (e) {
+    // Silently ignore — sync status is a nice-to-have
+  }
 }
 
 function renderCard(name, checks, history) {
@@ -586,19 +760,23 @@ async function loadI18n() {
   document.title = i18n.dashboard.title;
 }
 
-// Floor a Date to the nearest 15-minute boundary.
+// Floor a Date to the nearest 15-minute boundary (in UTC).
+// Using UTC keeps bucket IDs consistent with the server's UTC history dates,
+// so clicking a history day block correctly maps to the right buckets
+// regardless of the viewer's timezone. The display label still renders
+// in local time — only the internal ID uses UTC.
 function floorTo15Min(date) {
   const d = new Date(date);
-  d.setMinutes(Math.floor(d.getMinutes() / 15) * 15, 0, 0);
+  d.setUTCMinutes(Math.floor(d.getUTCMinutes() / 15) * 15, 0, 0);
   return d;
 }
 
-// Build a bucket key string for a 15-minute slot: "logs-YYYYMMDD-HHmm"
+// Build a bucket key string for a 15-minute slot: "logs-YYYYMMDD-HHmm" (UTC).
 function logBucketId(date) {
   const d = floorTo15Min(date);
   const pad = n => String(n).padStart(2, '0');
-  return 'logs-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate())
-       + '-' + pad(d.getHours()) + pad(d.getMinutes());
+  return 'logs-' + d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate())
+       + '-' + pad(d.getUTCHours()) + pad(d.getUTCMinutes());
 }
 
 // Timestamps of log groups currently on page (unix seconds of bucket start).
@@ -626,47 +804,54 @@ function scrollToBucket(id) {
   el.addEventListener('animationend', () => el.classList.remove('flash'), { once: true });
 }
 
-// Build the summary chips for a bucket (group entries by title+severity).
+// Build the summary chips for a bucket. Each entry is already aggregated
+// server-side (one entry per unique title+source in this 15-min bucket),
+// so we use the .count field directly — a DDoS showing 1,245,000 errors
+// is still just one chip displaying "×1245000".
 function buildChips(entries) {
-  const map = new Map(); // title -> { severity, source, count }
-  for (const e of entries) {
-    const key = e.title;
-    if (!map.has(key)) map.set(key, { severity: e.severity, source: e.source, count: 0 });
-    map.get(key).count++;
-  }
   let html = '';
-  for (const [title, info] of map) {
-    html += `<span class="log-chip log-chip-${escapeHtml(info.severity)}">${escapeHtml(info.source)} \u00b7 ${escapeHtml(title)} \u00d7${info.count}</span>`;
+  for (const e of entries) {
+    const count = e.count || 1;
+    html += `<span class="log-chip log-chip-${escapeHtml(e.severity)}">${escapeHtml(e.source)} \u00b7 ${escapeHtml(e.title)} \u00d7${count.toLocaleString()}</span>`;
   }
   return html;
 }
 
-// Build the expanded body for a bucket: entries grouped by error type.
+// Build the expanded body for a bucket. One block per aggregated entry
+// (title+source combination). Shows the sample log line, total count,
+// and the time range (first seen → last seen) within this bucket.
+//
+// Entries from source="check" are our OWN observations (from periodic checks)
+// and are explicitly labelled as such, with a pointer to the authoritative
+// journalctl command the user should run to verify. Entries from other
+// sources (nginx, php-fpm, etc.) come from the real log files tailed by
+// the watcher and are treated as higher-confidence.
 function buildBucketBody(entries) {
-  const map = new Map(); // title -> { severity, source, mitigation, lines[] }
-  for (const e of entries) {
-    const key = e.title;
-    if (!map.has(key)) map.set(key, { severity: e.severity, source: e.source, mitigation: e.mitigation, lines: [] });
-    map.get(key).lines.push({ line: e.line, time: e.timestamp });
-  }
   let html = '';
-  for (const [title, info] of map) {
-    const safeSev = escapeHtml(info.severity);
-    const linesId = 'lines-' + Math.random().toString(36).slice(2, 9);
+  for (const e of entries) {
+    const safeSev = escapeHtml(e.severity);
+    const count = e.count || 1;
+    const firstTime = new Date(e.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const lastTime = e.last_seen ? new Date(e.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : firstTime;
+    const timeRange = firstTime === lastTime ? firstTime : (firstTime + ' \u2192 ' + lastTime);
+    const isCheck = e.source === 'check';
+
     html += `<div class="log-type-group">`;
     html += `<div class="log-type-header">`;
-    html += `<span class="log-type-title sev-${safeSev}">${escapeHtml(title)}</span>`;
-    html += `<span class="log-type-source">${escapeHtml(info.source)}</span>`;
+    html += `<span class="log-type-title sev-${safeSev}">${escapeHtml(e.title)} <span style="color:#6e7681;font-weight:400;font-size:11px">\u00d7${count.toLocaleString()}</span></span>`;
+    html += `<span class="log-type-source">${escapeHtml(e.source)}${isCheck ? ' (observation)' : ''}</span>`;
     html += `</div>`;
-    html += `<div class="log-mitigation">${escapeHtml(info.mitigation)}</div>`;
-    if (info.lines.length > 0) {
-      html += `<div class="log-lines-toggle" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=this.nextElementSibling.classList.contains('open')?'\u25BC Hide ${info.lines.length} log lines':'\u25B6 Show ${info.lines.length} log lines'">\u25B6 Show ${info.lines.length} log lines</div>`;
-      html += `<div class="log-lines-list">`;
-      for (const l of info.lines) {
-        const t = new Date(l.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        html += `<div class="log-line-item"><span class="log-line-time">${escapeHtml(t)}</span>${escapeHtml(l.line)}</div>`;
-      }
-      html += `</div>`;
+    if (e.mitigation) {
+      html += `<div class="log-mitigation">${escapeHtml(e.mitigation)}</div>`;
+    }
+    html += `<div class="log-line-item"><span class="log-line-time">${escapeHtml(timeRange)}</span>${escapeHtml(e.line)}</div>`;
+
+    if (isCheck) {
+      // Observations from our periodic checks are not authoritative.
+      // The Sync button brings in journal entries (source="journal") for
+      // independent verification — they show up as separate entries in
+      // the same bucket with higher confidence.
+      html += `<div class="log-observe-note">Observation from a periodic check \u2014 look for matching <strong>journal</strong> entries in this bucket for authoritative confirmation.</div>`;
     }
     html += `</div>`;
   }
@@ -675,7 +860,9 @@ function buildBucketBody(entries) {
 
 async function fetchLogs() {
   try {
-    const resp = await fetch('/api/logs');
+    // Request 7 days so graph markers cover the full visible window.
+    // In-memory buffer is small (~200); disk stores up to 7 days.
+    const resp = await fetch('/api/logs?range=604800');
     if (!resp.ok) return;
     const data = await resp.json();
     const container = document.getElementById('logsContainer');
@@ -704,12 +891,21 @@ async function fetchLogs() {
 
     let html = '';
     const timestamps = [];
+    // Cap rendered buckets to avoid overwhelming the DOM with chatty logs.
+    // All bucket timestamps are still added for graph markers.
+    const MAX_RENDER = 200;
+    let rendered = 0;
     for (const [id, group] of groups) {
+      const bucketTs = Math.floor(group.date.getTime() / 1000);
+      timestamps.push(bucketTs);
+      if (rendered >= MAX_RENDER) continue;
+      rendered++;
       const endDate = new Date(group.date.getTime() + 15 * 60 * 1000);
-      const timeLabel = group.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const timeDate = group.date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      const timeLabel = timeDate + ' '
+                      + group.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                       + ' \u2013 '
                       + endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      timestamps.push(Math.floor(group.date.getTime() / 1000));
       const openClass = wasOpen.has(id) ? ' open' : '';
       html += `<div class="log-bucket${openClass}" id="${escapeHtml(id)}">`;
       html += `<div class="log-bucket-header" onclick="this.parentElement.classList.toggle('open')">`;
@@ -720,6 +916,9 @@ async function fetchLogs() {
       html += `</div>`;
       html += `<div class="log-bucket-body">${buildBucketBody(group.entries)}</div>`;
       html += `</div>`;
+    }
+    if (groups.size > MAX_RENDER) {
+      html += `<div style="text-align:center;color:#484f58;font-size:11px;padding:12px 0">Showing most recent ${MAX_RENDER} of ${groups.size} time windows</div>`;
     }
     container.innerHTML = html;
     logGroupTimestamps = timestamps;
@@ -1240,7 +1439,12 @@ async function fetchMetrics(rangeSeconds) {
 
 document.addEventListener('click', e => {
   const btn = e.target.closest('.metrics-range-btn');
-  if (btn) setActiveRange(Number(btn.dataset.seconds));
+  if (btn) { setActiveRange(Number(btn.dataset.seconds)); return; }
+  // History day clicks → jump to that day's logs
+  const histDay = e.target.closest('.history-day.hday-click');
+  if (histDay && histDay.dataset.date) {
+    jumpToLogsForDay(histDay.dataset.date);
+  }
 });
 
 // Update the sticky offset CSS variable so scroll-margin-top works.
@@ -1255,9 +1459,11 @@ loadI18n().then(() => {
   fetchLogs();
   fetchMetrics().then(updateStickyVar);
   gInitEvents();
+  refreshSyncStatus();
   setInterval(fetchStatus, 5000);
-  setInterval(fetchLogs, 900000);    // refresh logs every 15 minutes
-  setInterval(fetchMetrics, 300000); // refresh metrics every 5 minutes
+  setInterval(fetchLogs, 900000);         // refresh logs every 15 minutes
+  setInterval(fetchMetrics, 300000);      // refresh metrics every 5 minutes
+  setInterval(refreshSyncStatus, 60000);  // refresh "last synced Xm ago" each minute
   window.addEventListener('resize', updateStickyVar);
 });
 </script>

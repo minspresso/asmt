@@ -35,6 +35,7 @@ type Scheduler struct {
 	alerter        Alerter
 	logger         *slog.Logger
 	tr             *Translations
+	logWatcher     *LogWatcher // optional; if set, warn/critical results are recorded
 }
 
 func NewScheduler(checkers []Checker, interval time.Duration, alerter Alerter, logger *slog.Logger, tr *Translations, store *HistoryStore) *Scheduler {
@@ -65,6 +66,17 @@ func NewScheduler(checkers []Checker, interval time.Duration, alerter Alerter, l
 	}
 
 	return s
+}
+
+// SetLogWatcher wires a LogWatcher into the scheduler so that every
+// check result with status warn or critical is recorded as a log entry.
+// This unifies the "Log Warnings" timeline to cover BOTH log-file pattern
+// matches AND internal check state (disk, memory, load, SSL, DB, etc.).
+// Optional: if not called, the scheduler runs as before.
+func (s *Scheduler) SetLogWatcher(lw *LogWatcher) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.logWatcher = lw
 }
 
 // historyPriority ranks statuses for worst-of-day tracking.
@@ -211,6 +223,8 @@ func (s *Scheduler) runAll(ctx context.Context) {
 		prevStatus Status
 	}
 	var alerts []pendingAlert
+	// Collect warn/critical results to record into the log buffer outside the lock.
+	var logRecords []CheckResult
 
 	for cr := range ch {
 		s.mu.Lock()
@@ -218,6 +232,9 @@ func (s *Scheduler) runAll(ctx context.Context) {
 
 		for _, r := range cr.results {
 			s.updateHistory(r.Component, r.Status)
+			if r.Status == StatusWarn || r.Status == StatusCritical {
+				logRecords = append(logRecords, r)
+			}
 
 			// Track when a component first goes critical (for migration detection).
 			if r.Status == StatusCritical {
@@ -258,6 +275,18 @@ func (s *Scheduler) runAll(ctx context.Context) {
 	// Send alerts without holding the lock (prevents slow webhook/SMTP from blocking reads)
 	for _, a := range alerts {
 		s.alert(ctx, a.result, a.prevStatus)
+	}
+
+	// Record warn/critical check results into the unified log buffer so the
+	// "Log Warnings" timeline covers both log-file patterns AND check state.
+	// Read logWatcher under the lock, then record outside.
+	s.mu.RLock()
+	lw := s.logWatcher
+	s.mu.RUnlock()
+	if lw != nil {
+		for _, r := range logRecords {
+			lw.RecordCheckResult(r)
+		}
 	}
 
 	// Persist today's history to disk outside the lock.

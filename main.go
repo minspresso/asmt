@@ -180,7 +180,6 @@ func main() {
 
 	historyStore := NewHistoryStore(*configPath)
 	scheduler := NewScheduler(checkers, cfg.CheckInterval.Duration, alerter, logger, tr, historyStore)
-	go scheduler.Start(ctx)
 
 	// Start log watcher
 	var logWatcher *LogWatcher
@@ -195,17 +194,85 @@ func main() {
 			logFiles = DefaultLogFiles()
 		}
 		logWatcher = NewLogWatcher(logFiles, DefaultLogPatterns(), cfg.Logs.BufferSize, tr, historyStore)
+		// Wire log watcher into scheduler so check results (warn/critical)
+		// are recorded into the unified log timeline. Note: our check events
+		// are observations, not authoritative records. The OS / software logs
+		// (journalctl, syslog, nginx error.log, etc.) are the source of truth.
+		// When users need to verify or investigate, the dashboard points them
+		// there rather than relying on our own potentially-lossy buffer.
+		scheduler.SetLogWatcher(logWatcher)
 		go logWatcher.Start(ctx)
 		logger.Info("log watcher started", "files", len(logFiles), "buffer_size", cfg.Logs.BufferSize)
 	}
 
+	// Start scheduler AFTER wiring logWatcher so the very first check cycle
+	// can record any warn/critical results into the log buffer.
+	go scheduler.Start(ctx)
+
+	// Build a Syncer that pulls from the systemd journal and feeds our
+	// buffer. If journalctl isn't installed (e.g., Alpine), Syncer is
+	// disabled and the API handler returns 501.
+	var syncer *Syncer
+	if logWatcher != nil {
+		syncer = NewSyncer(logWatcher.buffer)
+		if syncer.Enabled() {
+			logger.Info("syncer ready (journalctl available)")
+			// Initial sync on startup: catches up any history the real-time
+			// tail goroutines missed while the process was down. Runs in a
+			// goroutine so HTTP server can start immediately.
+			go func() {
+				syncCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+				defer cancel()
+				res, err := syncer.Sync(syncCtx)
+				if err != nil {
+					logger.Warn("initial sync failed", "error", err)
+					return
+				}
+				logger.Info("initial sync complete",
+					"chunks", res.ChunksRun,
+					"lines_parsed", res.LinesParsed,
+					"events_added", res.EventsAdded,
+					"buffer_after", res.BufferAfter,
+					"duration", res.CompletedAt.Sub(res.StartedAt).String(),
+				)
+			}()
+			// Background auto-sync: every hour, catch up anything new.
+			go func() {
+				ticker := time.NewTicker(1 * time.Hour)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						syncCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+						res, err := syncer.Sync(syncCtx)
+						cancel()
+						if err != nil {
+							logger.Warn("auto-sync failed", "error", err)
+							continue
+						}
+						logger.Debug("auto-sync complete",
+							"events_added", res.EventsAdded,
+							"buffer_after", res.BufferAfter)
+					}
+				}
+			}()
+		} else {
+			logger.Info("syncer disabled (journalctl not available)")
+		}
+	}
+
 	// Start HTTP server
-	srv := NewServer(scheduler, logWatcher, cfg, logger, tr)
+	srv := NewServer(scheduler, logWatcher, syncer, cfg, logger, tr)
 	httpServer := &http.Server{
-		Addr:         cfg.Server.Address,
-		Handler:      srv.Handler(),
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		Addr:        cfg.Server.Address,
+		Handler:     srv.Handler(),
+		ReadTimeout: 5 * time.Second,
+		// WriteTimeout must exceed investigateTimeout (15s) so the
+		// /api/investigate endpoint can finish running journalctl and
+		// still deliver its response. Normal endpoints complete in ms.
+		WriteTimeout: 25 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
 

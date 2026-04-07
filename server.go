@@ -19,15 +19,17 @@ var dashboardHTML []byte
 type Server struct {
 	scheduler  *Scheduler
 	logWatcher *LogWatcher
+	syncer     *Syncer
 	config     *Config
 	logger     *slog.Logger
 	tr         *Translations
 }
 
-func NewServer(scheduler *Scheduler, logWatcher *LogWatcher, config *Config, logger *slog.Logger, tr *Translations) *Server {
+func NewServer(scheduler *Scheduler, logWatcher *LogWatcher, syncer *Syncer, config *Config, logger *slog.Logger, tr *Translations) *Server {
 	return &Server{
 		scheduler:  scheduler,
 		logWatcher: logWatcher,
+		syncer:     syncer,
 		config:     config,
 		logger:     logger,
 		tr:         tr,
@@ -67,6 +69,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/status", s.handleStatus)
 	mux.HandleFunc("GET /api/metrics", s.handleMetrics)
 	mux.HandleFunc("GET /api/logs", s.handleLogs)
+	mux.HandleFunc("POST /api/sync", s.handleSyncRun)
+	mux.HandleFunc("GET /api/sync", s.handleSyncStatus)
 	mux.HandleFunc("GET /api/i18n", s.handleI18n)
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	return securityHeaders(mux)
@@ -167,8 +171,9 @@ func (s *Server) handleI18n(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleLogs returns recent log warnings with mitigation advice.
-// ?range=<seconds> — returns entries from the last N seconds (loads from disk if needed).
-// Omitting range returns the in-memory buffer (most recent ~200 entries).
+// ?range=<seconds> — returns entries from the last N seconds.
+// Omitting range returns all in-memory entries (up to 7 days).
+// All reads are pure in-memory operations (no disk I/O per request).
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache, no-store")
@@ -195,6 +200,72 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		reversed[len(entries)-1-i] = e
 	}
 	json.NewEncoder(w).Encode(map[string]any{"entries": reversed})
+}
+
+// handleSyncRun runs a full sync against authoritative log sources and
+// returns the resulting SyncResult. Single-flight: if a sync is already
+// running, returns 409 Conflict.
+//
+// POST /api/sync
+//
+// Response codes:
+//   200 — sync completed (possibly with per-chunk errors in result.errors)
+//   409 — a sync is already in progress
+//   501 — journalctl not available on this system
+//   500 — unexpected error starting the sync
+func (s *Server) handleSyncRun(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store")
+
+	if s.syncer == nil || !s.syncer.Enabled() {
+		w.WriteHeader(http.StatusNotImplemented)
+		json.NewEncoder(w).Encode(map[string]any{
+			"error": "journalctl is not available on this system",
+		})
+		return
+	}
+
+	result, err := s.syncer.Sync(r.Context())
+	if err != nil {
+		switch err {
+		case ErrSyncInProgress:
+			w.WriteHeader(http.StatusConflict)
+		case ErrJournalctlUnavailable:
+			w.WriteHeader(http.StatusNotImplemented)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+			s.logger.Warn("sync failed", "error", err)
+		}
+		json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(result)
+}
+
+// handleSyncStatus returns last sync time and in-flight flag.
+//
+// GET /api/sync
+func (s *Server) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store")
+
+	if s.syncer == nil || !s.syncer.Enabled() {
+		json.NewEncoder(w).Encode(map[string]any{
+			"enabled": false,
+		})
+		return
+	}
+	last := s.syncer.LastSync()
+	var lastStr any
+	if !last.IsZero() {
+		lastStr = last.Format(time.RFC3339)
+	}
+	json.NewEncoder(w).Encode(map[string]any{
+		"enabled":   true,
+		"last_sync": lastStr,
+		"in_flight": s.syncer.InFlight(),
+		"result":    s.syncer.LastResult(),
+	})
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {

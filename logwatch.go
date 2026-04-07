@@ -47,88 +47,303 @@ type LogPattern struct {
 	MitigateKey string // i18n key for the mitigation advice
 }
 
-// LogEntry is a single matched log line stored in the ring buffer.
+// LogEntry represents one aggregated "incident" — all matches of the same
+// error pattern within a single 15-minute bucket are rolled up into one entry.
+// This keeps memory bounded regardless of error rate: a DDoS producing 10,000
+// matches/second in a 15-min window still takes just one LogEntry.
+//
+//   - Timestamp: first occurrence time (stable — used for chronological sorting)
+//   - LastSeen:  most recent occurrence time in this bucket
+//   - Line:      sample log line (the first one observed — representative)
+//   - Count:     total number of matches in this (bucket, title, source)
 type LogEntry struct {
-	Timestamp  time.Time  `json:"timestamp"`
-	Source     string     `json:"source"`
-	Severity   string     `json:"severity"`
-	Line       string     `json:"line"`
-	Title      string     `json:"title"`
-	Mitigation string     `json:"mitigation"`
+	Timestamp  time.Time `json:"timestamp"`
+	LastSeen   time.Time `json:"last_seen"`
+	Source     string    `json:"source"`
+	Severity   string    `json:"severity"`
+	Line       string    `json:"line"`
+	Title      string    `json:"title"`
+	Mitigation string    `json:"mitigation"`
+	Count      int       `json:"count"`
 }
 
-// RingBuffer is a fixed-size circular buffer for log entries.
-// Memory-bounded: stores at most `cap` entries regardless of input volume.
-type RingBuffer struct {
-	mu    sync.RWMutex
-	buf   []LogEntry
-	pos   int
-	count int
-	cap   int
+// logBucketSeconds is the 15-minute aggregation bucket width in seconds.
+const logBucketSeconds = 900
+
+// aggKey identifies one aggregated "incident": all matches of the same
+// pattern from the same source within the same 15-minute bucket.
+type aggKey struct {
+	bucketStart int64 // unix seconds of 15-min bucket start (UTC)
+	title       string
+	source      string
 }
 
-func NewRingBuffer(capacity int) *RingBuffer {
-	return &RingBuffer{
-		buf: make([]LogEntry, capacity),
-		cap: capacity,
+func bucketKeyFor(ts time.Time, title, source string) aggKey {
+	unix := ts.Unix()
+	return aggKey{
+		bucketStart: unix - (unix % logBucketSeconds),
+		title:       title,
+		source:      source,
 	}
 }
 
-func (rb *RingBuffer) Add(entry LogEntry) {
-	rb.mu.Lock()
-	rb.buf[rb.pos] = entry
-	rb.pos = (rb.pos + 1) % rb.cap
-	if rb.count < rb.cap {
-		rb.count++
-	}
-	rb.mu.Unlock()
+// logBuffer is a time-aware, aggregating in-memory store for log entries.
+//
+// Design goals:
+//   - Memory is bounded by DIMENSIONS (time × error types), NOT by rate.
+//     A DDoS producing 1M matches/sec contributes ~1 entry per unique error
+//     per 15-min bucket — identical memory to a quiet server with the same
+//     error variety.
+//   - All entries from the last 7 days live in memory so range queries
+//     are pure in-memory operations (no disk reads, no JSON parsing).
+//   - AddEvent: O(1) amortised map lookup + append in the common case.
+//   - Range queries: O(log n) binary search + slice copy.
+//
+// Internals:
+//   - entries: slice of *LogEntry sorted by first-seen Timestamp.
+//     Pointers (not values) so the map and the slice share the same
+//     LogEntry instance — updating a count via the map is visible via
+//     the slice without a second lookup.
+//   - keyed: map from aggKey to *LogEntry for O(1) aggregation lookups.
+type logBuffer struct {
+	mu      sync.RWMutex
+	entries []*LogEntry          // sorted by Timestamp (first-seen), oldest first
+	keyed   map[aggKey]*LogEntry // for O(1) aggregation lookup
+	maxAge  time.Duration        // entries older than this are pruned
+	maxSize int                  // hard cap on number of aggregated entries
+	addN    int                  // adds since last prune
 }
 
-// Entries returns all entries in chronological order (oldest first).
-func (rb *RingBuffer) Entries() []LogEntry {
-	rb.mu.RLock()
-	defer rb.mu.RUnlock()
+func newLogBuffer(maxAge time.Duration, maxSize int) *logBuffer {
+	return &logBuffer{
+		entries: make([]*LogEntry, 0, 512),
+		keyed:   make(map[aggKey]*LogEntry, 512),
+		maxAge:  maxAge,
+		maxSize: maxSize,
+	}
+}
 
-	result := make([]LogEntry, 0, rb.count)
-	if rb.count < rb.cap {
-		result = append(result, rb.buf[:rb.count]...)
+// severityRank orders severities so higher = worse. Used to upgrade
+// an aggregated entry's severity if a worse event arrives later in
+// the same bucket (e.g., disk goes warn → critical mid-bucket).
+func severityRank(s string) int {
+	switch s {
+	case "error":
+		return 3
+	case "warn":
+		return 2
+	case "info":
+		return 1
+	default:
+		return 0
+	}
+}
+
+// AddEvent records a single matched log line. If another match for the same
+// (15-min bucket, title, source) already exists, it is aggregated: the
+// existing entry's count is incremented, its LastSeen is updated, and its
+// severity is upgraded if the new event is worse. Otherwise a new entry is
+// inserted in chronological order.
+func (lb *logBuffer) AddEvent(e LogEntry) {
+	lb.mu.Lock()
+	defer lb.mu.Unlock()
+
+	key := bucketKeyFor(e.Timestamp, e.Title, e.Source)
+	if existing, ok := lb.keyed[key]; ok {
+		existing.Count++
+		if e.Timestamp.After(existing.LastSeen) {
+			existing.LastSeen = e.Timestamp
+		}
+		// Upgrade to the worse severity if the new event is more serious.
+		if severityRank(e.Severity) > severityRank(existing.Severity) {
+			existing.Severity = e.Severity
+			existing.Line = e.Line // update sample to the worse one
+			if e.Mitigation != "" {
+				existing.Mitigation = e.Mitigation
+			}
+		}
+		return
+	}
+
+	// New aggregated entry: count starts at 1.
+	entry := e
+	entry.Count = 1
+	entry.LastSeen = e.Timestamp
+	entryPtr := &entry
+	lb.keyed[key] = entryPtr
+
+	// Insert in sorted order (by first-seen Timestamp).
+	n := len(lb.entries)
+	if n == 0 || !entry.Timestamp.Before(lb.entries[n-1].Timestamp) {
+		// Fast path: append (common case for tail goroutines).
+		lb.entries = append(lb.entries, entryPtr)
 	} else {
-		result = append(result, rb.buf[rb.pos:]...)
-		result = append(result, rb.buf[:rb.pos]...)
+		// Slow path: binary search + insert.
+		idx := sort.Search(n, func(i int) bool {
+			return lb.entries[i].Timestamp.After(entry.Timestamp)
+		})
+		lb.entries = append(lb.entries, nil)
+		copy(lb.entries[idx+1:], lb.entries[idx:])
+		lb.entries[idx] = entryPtr
 	}
-	return result
+
+	lb.addN++
+	if lb.addN >= 64 {
+		lb.addN = 0
+		lb.pruneLocked()
+	}
 }
 
-// Count returns the number of entries currently in the buffer.
-func (rb *RingBuffer) Count() int {
-	rb.mu.RLock()
-	defer rb.mu.RUnlock()
-	return rb.count
+// AddAggregated inserts a pre-aggregated entry loaded from disk.
+// If the same (bucket, title, source) key already exists (e.g., from a
+// duplicate disk file), counts are merged.
+func (lb *logBuffer) AddAggregated(e LogEntry) {
+	if e.Count < 1 {
+		e.Count = 1 // backward compat for entries saved before aggregation
+	}
+	if e.LastSeen.IsZero() {
+		e.LastSeen = e.Timestamp
+	}
+
+	lb.mu.Lock()
+	defer lb.mu.Unlock()
+
+	key := bucketKeyFor(e.Timestamp, e.Title, e.Source)
+	if existing, ok := lb.keyed[key]; ok {
+		existing.Count += e.Count
+		if e.LastSeen.After(existing.LastSeen) {
+			existing.LastSeen = e.LastSeen
+		}
+		return
+	}
+
+	entry := e
+	entryPtr := &entry
+	lb.keyed[key] = entryPtr
+
+	n := len(lb.entries)
+	if n == 0 || !entry.Timestamp.Before(lb.entries[n-1].Timestamp) {
+		lb.entries = append(lb.entries, entryPtr)
+	} else {
+		idx := sort.Search(n, func(i int) bool {
+			return lb.entries[i].Timestamp.After(entry.Timestamp)
+		})
+		lb.entries = append(lb.entries, nil)
+		copy(lb.entries[idx+1:], lb.entries[idx:])
+		lb.entries[idx] = entryPtr
+	}
 }
 
-// Preload inserts historical entries (oldest first) without exceeding capacity.
-func (rb *RingBuffer) Preload(entries []LogEntry) {
-	rb.mu.Lock()
-	defer rb.mu.Unlock()
-	for _, e := range entries {
-		rb.buf[rb.pos] = e
-		rb.pos = (rb.pos + 1) % rb.cap
-		if rb.count < rb.cap {
-			rb.count++
+// pruneLocked drops entries older than maxAge and enforces maxSize.
+// Both the slice and the keyed map are kept in sync. Caller must hold lb.mu.
+func (lb *logBuffer) pruneLocked() {
+	dropFromFront := 0
+
+	// Age-based prune: entries are sorted, so binary search the cutoff.
+	if lb.maxAge > 0 {
+		cutoff := time.Now().Add(-lb.maxAge)
+		dropFromFront = sort.Search(len(lb.entries), func(i int) bool {
+			return !lb.entries[i].Timestamp.Before(cutoff)
+		})
+	}
+
+	// Hard size cap: if still too big, drop more from the oldest end.
+	if lb.maxSize > 0 && len(lb.entries)-dropFromFront > lb.maxSize {
+		dropFromFront = len(lb.entries) - lb.maxSize
+	}
+
+	if dropFromFront > 0 {
+		for i := 0; i < dropFromFront; i++ {
+			dropped := lb.entries[i]
+			key := bucketKeyFor(dropped.Timestamp, dropped.Title, dropped.Source)
+			delete(lb.keyed, key)
+			lb.entries[i] = nil // help GC
+		}
+		lb.entries = lb.entries[dropFromFront:]
+	}
+}
+
+// copyRange returns a value-copy of entries in the given slice range.
+// Caller must hold lb.mu (read or write lock).
+func copyRange(src []*LogEntry) []LogEntry {
+	out := make([]LogEntry, len(src))
+	for i, p := range src {
+		out[i] = *p
+	}
+	return out
+}
+
+// Entries returns up to `limit` of the newest entries in chronological order
+// (oldest first). If limit <= 0, returns all entries.
+func (lb *logBuffer) Entries(limit int) []LogEntry {
+	lb.mu.RLock()
+	defer lb.mu.RUnlock()
+	n := len(lb.entries)
+	start := 0
+	if limit > 0 && n > limit {
+		start = n - limit
+	}
+	return copyRange(lb.entries[start:])
+}
+
+// EntriesSince returns all entries whose first-seen Timestamp is within the
+// last `d` duration. Uses binary search for O(log n) cutoff lookup.
+func (lb *logBuffer) EntriesSince(d time.Duration) []LogEntry {
+	lb.mu.RLock()
+	defer lb.mu.RUnlock()
+	cutoff := time.Now().Add(-d)
+	idx := sort.Search(len(lb.entries), func(i int) bool {
+		return !lb.entries[i].Timestamp.Before(cutoff)
+	})
+	return copyRange(lb.entries[idx:])
+}
+
+// EntriesForDay returns entries whose first-seen Timestamp falls on the given
+// UTC day. Used by saveLogs for daily persistence.
+func (lb *logBuffer) EntriesForDay(dayStart time.Time) []LogEntry {
+	lb.mu.RLock()
+	defer lb.mu.RUnlock()
+	dayEnd := dayStart.Add(24 * time.Hour)
+	lo := sort.Search(len(lb.entries), func(i int) bool {
+		return !lb.entries[i].Timestamp.Before(dayStart)
+	})
+	hi := sort.Search(len(lb.entries), func(i int) bool {
+		return !lb.entries[i].Timestamp.Before(dayEnd)
+	})
+	return copyRange(lb.entries[lo:hi])
+}
+
+// MaxLastSeen returns the most recent LastSeen timestamp across all entries,
+// or zero if the buffer is empty. Used by scanRecent to avoid re-counting
+// events that were already loaded from disk.
+func (lb *logBuffer) MaxLastSeen() time.Time {
+	lb.mu.RLock()
+	defer lb.mu.RUnlock()
+	var max time.Time
+	for _, e := range lb.entries {
+		if e.LastSeen.After(max) {
+			max = e.LastSeen
 		}
 	}
+	return max
+}
+
+// Len returns the current aggregated entry count.
+func (lb *logBuffer) Len() int {
+	lb.mu.RLock()
+	defer lb.mu.RUnlock()
+	return len(lb.entries)
 }
 
 // LogWatcher tails multiple log files and matches lines against known patterns.
 type LogWatcher struct {
 	patterns []LogPattern
-	buffer   *RingBuffer
+	buffer   *logBuffer
 	files    []LogFileConfig
 	tr       *Translations
 	store    *HistoryStore
-	saveN    atomic.Int32           // entries since last persist (accessed from multiple goroutines)
-	saveMu   sync.Mutex             // serialises saveLogs calls
-	seen     map[string]struct{}    // transient dedup set used only during scanRecent
+	saveN    atomic.Int32 // entries since last persist (accessed from multiple goroutines)
+	saveMu   sync.Mutex   // serialises saveLogs calls
 }
 
 // LogFileConfig defines a log file to watch.
@@ -137,13 +352,31 @@ type LogFileConfig struct {
 	Source string // nginx, php-fpm, mariadb, system
 }
 
+// Buffer sizing:
+//   - maxAge=7d matches our on-disk retention.
+//   - maxSize caps the number of AGGREGATED entries, not raw events.
+//     Each entry represents one (15-min bucket × title × source) combination.
+//     Dimensions: 672 buckets (7d × 96/day) × realistic max ~25 distinct
+//     error types per bucket = ~16800 entries worst case.
+//   - Memory: 20000 entries × ~700 bytes ≈ 14MB hard ceiling.
+//     Typical server: <2000 entries, <2MB.
+//     A DDoS producing 1M matches/sec contributes the same memory as a
+//     quiet server with the same variety of errors — only count increases.
+const (
+	logBufferMaxAge  = 7 * 24 * time.Hour
+	logBufferMaxSize = 20000
+)
+
 func NewLogWatcher(files []LogFileConfig, patterns []LogPattern, bufSize int, tr *Translations, store *HistoryStore) *LogWatcher {
-	if bufSize <= 0 {
-		bufSize = 200
+	// bufSize from config is used as a soft hint; the real cap is logBufferMaxSize.
+	// This keeps config.yaml compatible while preventing undersized buffers.
+	maxSize := logBufferMaxSize
+	if bufSize > 0 && bufSize > maxSize {
+		maxSize = bufSize
 	}
 	lw := &LogWatcher{
 		patterns: patterns,
-		buffer:   NewRingBuffer(bufSize),
+		buffer:   newLogBuffer(logBufferMaxAge, maxSize),
 		files:    files,
 		tr:       tr,
 		store:    store,
@@ -155,44 +388,56 @@ func NewLogWatcher(files []LogFileConfig, patterns []LogPattern, bufSize int, tr
 // Start scans recent history from log files, then begins tailing for new lines.
 func (lw *LogWatcher) Start(ctx context.Context) {
 	lw.scanRecent()
+	// Re-save after startup so any disk files loaded in a legacy (pre-aggregation)
+	// format get rewritten in the compact aggregated format. Idempotent and cheap.
+	if lw.buffer.Len() > 0 {
+		lw.saveLogs()
+	}
 	for _, fc := range lw.files {
 		go lw.tailFile(ctx, fc)
 	}
 }
 
-// scanRecent reads the tail of each log file (up to 64KB) and matches patterns
-// against existing lines. This captures incidents that happened before the
-// process started. Only entries from the last 24 hours are kept.
-// Entries already loaded from disk (via loadLogs) are skipped to avoid duplicates.
+// scanRecent reads the tail of each log file (up to 64KB) and matches
+// patterns against existing lines. This captures incidents that happened
+// before the process started.
+//
+// Cutoff logic: we take the MAX of (now-24h) and (MaxLastSeen from already-
+// loaded buffer entries) + 1 second. This prevents double-counting events
+// that were already persisted to disk and loaded via loadLogs.
 func (lw *LogWatcher) scanRecent() {
-	// Build a set of existing entries to avoid duplicates from loadLogs.
-	existing := lw.buffer.Entries()
-	lw.seen = make(map[string]struct{}, len(existing))
-	for _, e := range existing {
-		lw.seen[e.Timestamp.Format(time.RFC3339)+"|"+e.Line] = struct{}{}
-	}
-
 	cutoff := time.Now().Add(-24 * time.Hour)
-	for _, fc := range lw.files {
-		lw.scanFile(fc, cutoff)
+	if maxLoaded := lw.buffer.MaxLastSeen(); !maxLoaded.IsZero() {
+		advanced := maxLoaded.Add(time.Second)
+		if advanced.After(cutoff) {
+			cutoff = advanced
+		}
 	}
-	lw.seen = nil // free memory
-	// Persist what we found so it survives the next restart too.
-	lw.saveLogs()
+	added := 0
+	for _, fc := range lw.files {
+		added += lw.scanFile(fc, cutoff)
+	}
+	if added > 0 {
+		lw.saveLogs()
+	}
 }
 
 const scanTailBytes = 64 * 1024 // 64KB per file
 
-func (lw *LogWatcher) scanFile(fc LogFileConfig, cutoff time.Time) {
+// scanFile reads the tail of a log file and feeds matching lines to the
+// buffer via AddEvent. Aggregation in the buffer handles dedup naturally:
+// the same (bucket, title, source) key just has its count bumped.
+// Returns the number of matched lines processed.
+func (lw *LogWatcher) scanFile(fc LogFileConfig, cutoff time.Time) int {
 	f, err := os.Open(fc.Path)
 	if err != nil {
-		return
+		return 0
 	}
 	defer f.Close()
 
 	info, err := f.Stat()
 	if err != nil {
-		return
+		return 0
 	}
 
 	readFrom := int64(0)
@@ -200,13 +445,13 @@ func (lw *LogWatcher) scanFile(fc LogFileConfig, cutoff time.Time) {
 		readFrom = info.Size() - scanTailBytes
 	}
 	if _, err := f.Seek(readFrom, io.SeekStart); err != nil {
-		return
+		return 0
 	}
 
 	buf := make([]byte, info.Size()-readFrom)
 	n, err := io.ReadFull(f, buf)
 	if err != nil && err != io.ErrUnexpectedEOF {
-		return
+		return 0
 	}
 	buf = buf[:n]
 
@@ -216,6 +461,7 @@ func (lw *LogWatcher) scanFile(fc LogFileConfig, cutoff time.Time) {
 		lines = lines[1:]
 	}
 
+	count := 0
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -225,8 +471,12 @@ func (lw *LogWatcher) scanFile(fc LogFileConfig, cutoff time.Time) {
 		if ts.IsZero() || ts.Before(cutoff) {
 			continue
 		}
-		lw.matchLineWithTimestamp(line, fc.Source, ts)
+		if entry, ok := lw.matchLineEntry(line, fc.Source, ts); ok {
+			lw.buffer.AddEvent(entry)
+			count++
+		}
 	}
+	return count
 }
 
 // parseLogTimestamp extracts a timestamp from common log formats.
@@ -257,115 +507,79 @@ func parseLogTimestamp(line string) time.Time {
 	return time.Time{}
 }
 
-func (lw *LogWatcher) matchLineWithTimestamp(line, source string, ts time.Time) {
+// matchLineEntry returns a LogEntry if the line matches a known pattern.
+// Does not add to the buffer — caller decides what to do with the result.
+// Used by scanFileBatch for bulk-loading with dedup.
+func (lw *LogWatcher) matchLineEntry(line, source string, ts time.Time) (LogEntry, bool) {
 	for _, p := range lw.patterns {
 		if p.Source != "" && p.Source != source {
 			continue
 		}
 		if strings.Contains(line, p.Substring) {
-			truncated := truncate(line, 500)
-			// Skip if already loaded from disk (dedup during scanRecent).
-			if lw.seen != nil {
-				key := ts.Format(time.RFC3339) + "|" + truncated
-				if _, dup := lw.seen[key]; dup {
-					return
-				}
-			}
-			lw.buffer.Add(LogEntry{
+			return LogEntry{
 				Timestamp:  ts,
 				Source:     source,
 				Severity:   p.Severity.String(),
-				Line:       truncated,
+				Line:       truncate(line, 500),
 				Title:      lw.tr.T(p.TitleKey),
 				Mitigation: lw.tr.T(p.MitigateKey),
-			})
-			return
+			}, true
 		}
 	}
+	return LogEntry{}, false
 }
 
 // GetEntries returns all buffered log entries.
+// GetEntries returns up to `limit` of the most recent buffered entries in
+// chronological order (oldest first). Pass 0 for all entries.
 func (lw *LogWatcher) GetEntries() []LogEntry {
-	return lw.buffer.Entries()
+	return lw.buffer.Entries(0)
 }
 
-// GetEntriesSince returns log entries from the last d duration, loading from disk if needed.
-func (lw *LogWatcher) GetEntriesSince(d time.Duration) []LogEntry {
-	cutoff := time.Now().Add(-d)
-
-	// Start with in-memory entries.
-	memEntries := lw.buffer.Entries()
-
-	// Check if memory covers the full range.
-	if len(memEntries) > 0 && !memEntries[0].Timestamp.After(cutoff) {
-		// Memory buffer covers the range, just filter.
-		var result []LogEntry
-		for _, e := range memEntries {
-			if !e.Timestamp.Before(cutoff) {
-				result = append(result, e)
-			}
-		}
-		return result
+// RecordCheckResult records a check result (warn/critical) as a log entry.
+// This lets the "Log Warnings" section show a unified timeline of both
+// log-file pattern matches AND internal check state (disk, memory, load,
+// DB ping, SSL cert expiry, etc.) — anything tracked by the scheduler.
+//
+// OK results are ignored. Aggregation handles high-frequency updates: a
+// check that's warn for an entire 15-min window becomes one entry with a
+// count reflecting how many check cycles it was bad.
+func (lw *LogWatcher) RecordCheckResult(r CheckResult) {
+	if lw == nil {
+		return
 	}
-
-	// Need disk entries too.
-	if lw.store == nil {
-		return memEntries
+	if r.Status != StatusWarn && r.Status != StatusCritical {
+		return
 	}
-
-	entries, err := os.ReadDir(lw.store.dir)
-	if err != nil {
-		return memEntries
+	severity := "warn"
+	if r.Status == StatusCritical {
+		severity = "error"
 	}
-
-	cutoffDate := cutoff.UTC().Format("2006-01-02")
-	var all []LogEntry
-
-	for _, entry := range entries {
-		name := entry.Name()
-		if !strings.HasPrefix(name, "logs-") || !strings.HasSuffix(name, ".json") {
-			continue
-		}
-		date := strings.TrimPrefix(strings.TrimSuffix(name, ".json"), "logs-")
-		if date < cutoffDate {
-			continue
-		}
-
-		raw, err := os.ReadFile(filepath.Join(lw.store.dir, name))
-		if err != nil {
-			continue
-		}
-		var f logDayFile
-		if err := json.Unmarshal(raw, &f); err != nil {
-			continue
-		}
-		if f.MachineID != lw.store.machineID {
-			continue
-		}
-		for _, e := range f.Entries {
-			if !e.Timestamp.Before(cutoff) {
-				all = append(all, e)
-			}
-		}
+	// Title = component name (e.g. "linux-disk", "mariadb-ping").
+	// Source = "check" so UI chips show "check · linux-disk ×N".
+	// Line = the check message (e.g. "/var: 86% used").
+	// Mitigation is empty — the check itself already describes the issue.
+	ts := r.CheckedAt
+	if ts.IsZero() {
+		ts = time.Now()
 	}
-
-	// Merge with in-memory entries (dedup by timestamp+line).
-	seen := make(map[string]struct{})
-	for _, e := range all {
-		key := e.Timestamp.Format(time.RFC3339Nano) + "|" + e.Line
-		seen[key] = struct{}{}
-	}
-	for _, e := range memEntries {
-		key := e.Timestamp.Format(time.RFC3339Nano) + "|" + e.Line
-		if _, dup := seen[key]; !dup {
-			all = append(all, e)
-		}
-	}
-
-	sort.Slice(all, func(i, j int) bool {
-		return all[i].Timestamp.Before(all[j].Timestamp)
+	lw.buffer.AddEvent(LogEntry{
+		Timestamp: ts,
+		Source:    "check",
+		Severity:  severity,
+		Line:      r.Message,
+		Title:     r.Component,
 	})
-	return all
+	if lw.saveN.Add(1) >= 10 {
+		lw.saveN.Store(0)
+		lw.saveLogs()
+	}
+}
+
+// GetEntriesSince returns log entries from the last d duration.
+// Pure in-memory operation — no disk reads. O(log n + k) where k is result size.
+func (lw *LogWatcher) GetEntriesSince(d time.Duration) []LogEntry {
+	return lw.buffer.EntriesSince(d)
 }
 
 // tailFile opens a log file, seeks to the end, and reads new lines as they appear.
@@ -448,27 +662,20 @@ func (lw *LogWatcher) tailOnce(ctx context.Context, fc LogFileConfig) error {
 	}
 }
 
+// matchLine is called by tail goroutines for each new log line.
+// Uses time.Now() as the timestamp (monotonic — fast-path in buffer).
+// AddEvent aggregates by (bucket, title, source), so chatty errors
+// increment a counter instead of filling the buffer.
 func (lw *LogWatcher) matchLine(line, source string) {
-	for _, p := range lw.patterns {
-		if p.Source != "" && p.Source != source {
-			continue
-		}
-		if strings.Contains(line, p.Substring) {
-			lw.buffer.Add(LogEntry{
-				Timestamp:  time.Now(),
-				Source:     source,
-				Severity:   p.Severity.String(),
-				Line:       truncate(line, 500),
-				Title:      lw.tr.T(p.TitleKey),
-				Mitigation: lw.tr.T(p.MitigateKey),
-			})
-			// Persist every 10 new entries (~infrequent writes).
-			if lw.saveN.Add(1) >= 10 {
-				lw.saveN.Store(0)
-				lw.saveLogs()
-			}
-			return // one match per line is enough
-		}
+	entry, ok := lw.matchLineEntry(line, source, time.Now())
+	if !ok {
+		return
+	}
+	lw.buffer.AddEvent(entry)
+	// Persist every 10 events (~infrequent writes).
+	if lw.saveN.Add(1) >= 10 {
+		lw.saveN.Store(0)
+		lw.saveLogs()
 	}
 }
 
@@ -489,6 +696,8 @@ type logDayFile struct {
 const logRetentionDays = 7
 
 // saveLogs persists today's log entries to disk (atomic write).
+// saveLogs persists today's buffered entries to disk (atomic write).
+// Uses EntriesForDay which binary-searches the day's slice in O(log n).
 func (lw *LogWatcher) saveLogs() {
 	if lw.store == nil {
 		return
@@ -499,16 +708,8 @@ func (lw *LogWatcher) saveLogs() {
 		return
 	}
 
-	today := time.Now().UTC().Format("2006-01-02")
 	todayStart := time.Now().UTC().Truncate(24 * time.Hour)
-
-	entries := lw.buffer.Entries()
-	var todayEntries []LogEntry
-	for _, e := range entries {
-		if !e.Timestamp.Before(todayStart) {
-			todayEntries = append(todayEntries, e)
-		}
-	}
+	todayEntries := lw.buffer.EntriesForDay(todayStart)
 	if len(todayEntries) == 0 {
 		return
 	}
@@ -521,6 +722,7 @@ func (lw *LogWatcher) saveLogs() {
 		return
 	}
 
+	today := todayStart.Format("2006-01-02")
 	path := filepath.Join(lw.store.dir, "logs-"+today+".json")
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
@@ -530,6 +732,7 @@ func (lw *LogWatcher) saveLogs() {
 }
 
 // loadLogs reads up to logRetentionDays of persisted log entries on startup.
+// Uses AddAggregated so existing Count fields from prior sessions are preserved.
 func (lw *LogWatcher) loadLogs() {
 	if lw.store == nil {
 		return
@@ -540,7 +743,6 @@ func (lw *LogWatcher) loadLogs() {
 	}
 
 	cutoff := time.Now().UTC().AddDate(0, 0, -logRetentionDays).Format("2006-01-02")
-	var all []LogEntry
 
 	for _, entry := range entries {
 		name := entry.Name()
@@ -550,8 +752,8 @@ func (lw *LogWatcher) loadLogs() {
 		date := strings.TrimPrefix(strings.TrimSuffix(name, ".json"), "logs-")
 		path := filepath.Join(lw.store.dir, name)
 
-		// Delete old files beyond retention.
-		if date <= cutoff {
+		// Delete files beyond the 7-day retention.
+		if date < cutoff {
 			os.Remove(path)
 			continue
 		}
@@ -567,14 +769,10 @@ func (lw *LogWatcher) loadLogs() {
 		if f.MachineID != lw.store.machineID {
 			continue
 		}
-		all = append(all, f.Entries...)
+		for _, e := range f.Entries {
+			lw.buffer.AddAggregated(e)
+		}
 	}
-
-	// Sort oldest-first, then preload into ring buffer.
-	sort.Slice(all, func(i, j int) bool {
-		return all[i].Timestamp.Before(all[j].Timestamp)
-	})
-	lw.buffer.Preload(all)
 }
 
 // DefaultLogFiles auto-detects log files that exist on this system.

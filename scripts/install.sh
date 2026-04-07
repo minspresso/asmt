@@ -276,7 +276,13 @@ User=root
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=-${INSTALL_DIR}/env
 Environment="GOGC=50"
-Environment="GOMEMLIMIT=12MiB"
+# GOMEMLIMIT is a soft GC trigger, NOT an allocation reservation.
+# Setting it generously costs zero bytes of RSS in normal operation,
+# and gives the runtime headroom when the tool needs to work hardest —
+# under incident conditions where buffers fill, sync is running, and
+# the tail goroutines are busy. Realistic worst-case peak is ~40 MB
+# (runtime + buffer-at-cap + sync burst); 64 MiB gives 1.6× margin.
+Environment="GOMEMLIMIT=64MiB"
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
@@ -304,9 +310,11 @@ pidfile="/run/${SERVICE_NAME}.pid"
 output_log="/var/log/${SERVICE_NAME}.log"
 error_log="/var/log/${SERVICE_NAME}.log"
 
-# GC tuning (match systemd Environment settings)
+# GC tuning (match systemd Environment settings).
+# GOMEMLIMIT is a soft GC trigger, not an allocation reservation — generous
+# limits give breathing room under incident load without costing RSS when idle.
 export GOGC=50
-export GOMEMLIMIT=12MiB
+export GOMEMLIMIT=64MiB
 
 depend() {
     need net

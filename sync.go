@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2025 minspresso
 //
-// sync.go — authoritative log synchronization.
+// sync.go: authoritative log synchronization.
 //
 // DESIGN
 // ======
@@ -12,8 +12,8 @@
 // reality rather than just "what we happened to see".
 //
 // Sources:
-//  1. systemd journal (journalctl) — unified system events, priority-filtered
-//  2. kernel log (journalctl -k) — OOM-killer, disk/hardware/nic errors
+//  1. systemd journal (journalctl): unified system events, priority-filtered
+//  2. kernel log (journalctl -k): OOM-killer, disk/hardware/nic errors
 //
 // We do NOT re-scan the tailed log files during sync: the tail goroutines
 // already capture those in real time, and scanning gigabytes of nginx logs
@@ -26,7 +26,7 @@
 // degradation. The architecture makes this trivial at steady state because
 // aggregation collapses all events for the same (15-min bucket, title,
 // source) into one LogEntry with a count. 500/sec × 900s = 450,000 events
-// per 15-min bucket — but only ONE buffer entry per unique error type.
+// per 15-min bucket, but only ONE buffer entry per unique error type.
 //
 // The hard case is the parse burst when Sync() catches up on a window that
 // already contains millions of events. This module handles it by:
@@ -239,7 +239,7 @@ func (s *Syncer) Sync(ctx context.Context) (*SyncResult, error) {
 				"chunk_index", res.ChunksRun,
 				"chunk_start", chunkStart.Format(time.RFC3339),
 				"error", err)
-			// Don't abort — continue with remaining chunks so partial
+			// Don't abort. Continue with remaining chunks so partial
 			// data is better than nothing.
 		}
 		if ctx.Err() != nil {
@@ -348,15 +348,15 @@ func (s *Syncer) streamJournalctl(ctx context.Context, args ...string) (int, int
 	}
 	scanErr := scanner.Err()
 	// Drain+wait always to avoid zombie. If ctx timed out, Wait returns
-	// the kill signal error — we report it only if scanning didn't get
+	// the kill signal error. We report it only if scanning didn't get
 	// the real underlying error first.
 	waitErr := cmd.Wait()
 
 	if scanErr != nil {
 		if scanErr == bufio.ErrTooLong {
 			// A single journal entry exceeded the 1MB scanner max.
-			// This is not a fatal error — the rest of the scan already
-			// completed — but it DOES mean we silently lost an entry
+			// This is not a fatal error (the rest of the scan already
+			// completed), but it DOES mean we silently lost an entry
 			// that might have been important. Log it server-side so
 			// operators can investigate if they see the warning.
 			s.logger.Warn("journal entry exceeded 1MB scanner buffer; entry skipped",
@@ -449,8 +449,8 @@ func parseJournalLine(line []byte) (LogEntry, bool) {
 		title = "system"
 	}
 
-	// Sample message (capped). The full entry is always in the journal —
-	// our buffer is a summary, not an archive.
+	// Sample message (capped). The full entry is always in the journal.
+	// Our buffer is a summary, not an archive.
 	sample := f.Message
 	if len(sample) > 500 {
 		sample = sample[:500] + "..."

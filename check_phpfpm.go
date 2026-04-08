@@ -29,14 +29,14 @@ func isPHPFPMProcess(name string) bool {
 	if name == "php-fpm" {
 		return true
 	}
-	// "php-fpm<digit>..." — next char after "php-fpm" must be a digit
+	// "php-fpm<digit>...": next char after "php-fpm" must be a digit
 	if strings.HasPrefix(name, "php-fpm") && len(name) > 7 {
 		c := name[7]
 		if c >= '0' && c <= '9' {
 			return true
 		}
 	}
-	// "phpN.M-fpm" — "php" + digit + optional ".digit" + "-fpm"
+	// "phpN.M-fpm": "php" + digit + optional ".digit" + "-fpm"
 	if strings.HasPrefix(name, "php") && strings.HasSuffix(name, "-fpm") {
 		ver := name[3 : len(name)-4]
 		if len(ver) > 0 && ver[0] >= '0' && ver[0] <= '9' {

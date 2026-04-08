@@ -3,7 +3,7 @@
 //
 // Benchmark tests for the aggregating logBuffer under high sustained load.
 // These verify the claim that we can handle hundreds of events/second for
-// extended periods without memory growth — aggregation collapses events to
+// extended periods without memory growth. Aggregation collapses events to
 // O(unique buckets × titles).
 
 package main
@@ -84,7 +84,7 @@ func TestLogBufferHighThroughput(t *testing.T) {
 		t.Errorf("throughput %.0f events/sec below expected %.0f", throughput, minThroughput)
 	}
 
-	// Memory growth should be small — aggregation keeps it bounded.
+	// Memory growth should be small. Aggregation keeps it bounded.
 	if memGrowthMB > 20 {
 		t.Errorf("heap grew by %d MB, expected <20 MB", memGrowthMB)
 	}
@@ -114,7 +114,7 @@ func TestLogBufferSustained24h(t *testing.T) {
 	start := time.Now()
 	windowStart := time.Now().Add(-time.Duration(simulatedHours) * time.Hour)
 	windowSpan := time.Duration(simulatedHours) * time.Hour
-	// Step per event as Duration — avoids int64 overflow that happens
+	// Step per event as Duration, avoids int64 overflow that happens
 	// when you multiply totalEvents by windowSpan nanoseconds directly.
 	step := windowSpan / time.Duration(totalEvents)
 

@@ -24,7 +24,7 @@ func main() {
 
 	// Set a default GOMEMLIMIT only if the operator hasn't already set one
 	// via the environment. The Go runtime treats GOMEMLIMIT as a *soft* GC
-	// trigger, not an allocation reservation — a generous ceiling costs zero
+	// trigger, not an allocation reservation. A generous ceiling costs zero
 	// RSS at idle and gives the runtime headroom on the worst day, when
 	// buffers fill, the syncer is running, and the tail goroutines are busy.
 	// Measured peak on a production VM is ~16 MB; 64 MiB gives ~4× margin.
@@ -274,8 +274,8 @@ func main() {
 	// Loud warning if the tool is configured to listen on a non-loopback
 	// address. ASMT has NO built-in authentication; operators who bind
 	// outside 127.0.0.1 must put a reverse proxy with auth in front of it.
-	// We can't refuse to start — some operators intentionally expose via a
-	// trusted private network — but we make absolutely sure the operator
+	// We can't refuse to start (some operators intentionally expose via a
+	// trusted private network), but we make absolutely sure the operator
 	// knows what they're doing.
 	if !isLoopbackBind(cfg.Server.Address) {
 		logger.Warn("LISTENING ON NON-LOOPBACK ADDRESS WITHOUT BUILT-IN AUTHENTICATION",
@@ -344,7 +344,7 @@ func main() {
 
 // sslDomains builds a deduplicated list of HTTPS hosts to check.
 // Starts from explicit config, then adds hosts from any https:// WordPress
-// or HTTP endpoint URLs already configured — no separate config entry needed.
+// or HTTP endpoint URLs already configured. No separate config entry needed.
 func sslDomains(cfg *Config) []string {
 	seen := make(map[string]struct{})
 	var out []string

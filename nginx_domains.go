@@ -48,7 +48,7 @@ func nginxDomains() []string {
 		paths = append(paths, matches...)
 	}
 
-	// Per-file read cap — nginx configs are small text files; anything
+	// Per-file read cap. Nginx configs are small text files; anything
 	// above this limit is almost certainly malicious or broken.
 	const maxConfigSize = 2 * 1024 * 1024 // 2 MB
 

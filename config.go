@@ -103,13 +103,13 @@ type RedisCheckConfig struct {
 	Enabled  bool   `yaml:"enabled"`
 	Name     string `yaml:"name"`     // display name; defaults to "redis"
 	Addr     string `yaml:"addr"`     // host:port; defaults to "127.0.0.1:6379"
-	Password string `yaml:"password"` // use ${REDIS_PASSWORD} — never hardcode
+	Password string `yaml:"password"` // use ${REDIS_PASSWORD}, never hardcode
 }
 
 type PostgreSQLCheckConfig struct {
 	Enabled bool   `yaml:"enabled"`
 	Name    string `yaml:"name"` // display name; defaults to "postgresql"
-	DSN     string `yaml:"dsn"`  // postgres://user:pass@host/db?sslmode=disable — use ${POSTGRES_DSN}
+	DSN     string `yaml:"dsn"`  // postgres://user:pass@host/db?sslmode=disable, use ${POSTGRES_DSN}
 }
 
 // HTTPEndpointConfig describes a single custom HTTP health probe.

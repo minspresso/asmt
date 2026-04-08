@@ -61,15 +61,15 @@ type checkResultJSON struct {
 // step, no separate JS file). That means 'unsafe-inline' must be
 // allowed in script-src. We still lock down every other directive:
 //
-//   default-src 'self'      — block loads from any other origin
-//   script-src 'self' 'unsafe-inline' — our own inline scripts, no CDNs
-//   style-src 'self' 'unsafe-inline'  — our own inline styles, no external CSS
-//   img-src 'self' data:    — inline data URIs only (no tracking pixels)
-//   connect-src 'self'      — fetch/XHR only to our own origin
-//   object-src 'none'       — block <object>, <embed>, Flash
-//   base-uri 'self'         — prevent <base href> hijacks
-//   form-action 'none'      — no form submissions
-//   frame-ancestors 'none'  — redundant with X-Frame-Options
+//   default-src 'self'                : block loads from any other origin
+//   script-src 'self' 'unsafe-inline' : our own inline scripts, no CDNs
+//   style-src 'self' 'unsafe-inline'  : our own inline styles, no external CSS
+//   img-src 'self' data:              : inline data URIs only (no tracking pixels)
+//   connect-src 'self'                : fetch/XHR only to our own origin
+//   object-src 'none'                 : block <object>, <embed>, Flash
+//   base-uri 'self'                   : prevent <base href> hijacks
+//   form-action 'none'                : no form submissions
+//   frame-ancestors 'none'            : redundant with X-Frame-Options
 //
 // This policy would break if the dashboard ever tried to embed a
 // CDN-hosted library; that's intentional. Everything ships in the
@@ -109,7 +109,7 @@ func securityHeaders(next http.Handler) http.Handler {
 //   - POST with Origin must match r.Host.
 //   - POST with only Referer must start with the same scheme://host.
 //
-// This is intentionally not a full CSRF token scheme — we don't manage
+// This is intentionally not a full CSRF token scheme. We don't manage
 // sessions. The goal is to block the drive-by attack where a victim
 // visits attacker.example while the dashboard is open in another tab.
 func sameOriginPOST(next http.Handler) http.Handler {
@@ -238,7 +238,7 @@ func parseRangeSeconds(s string) (int, bool) {
 }
 
 // handleMetrics returns metric points for the requested range.
-// ?range=<seconds> — filters to the last N seconds at full resolution.
+// ?range=<seconds> filters to the last N seconds at full resolution.
 // Omitting range returns the full 7-day buffer sampled to 2016 points.
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	var points []MetricPoint
@@ -289,7 +289,7 @@ func (s *Server) handleI18n(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleLogs returns recent log warnings with mitigation advice.
-// ?range=<seconds> — returns entries from the last N seconds.
+// ?range=<seconds> returns entries from the last N seconds.
 // Omitting range returns all in-memory entries (up to 7 days).
 // All reads are pure in-memory operations (no disk I/O per request).
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
@@ -324,10 +324,10 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 // POST /api/sync
 //
 // Response codes:
-//   200 — sync completed (possibly with per-chunk errors in result.errors)
-//   409 — a sync is already in progress
-//   501 — journalctl not available on this system
-//   500 — unexpected error starting the sync
+//   200: sync completed (possibly with per-chunk errors in result.errors)
+//   409: a sync is already in progress
+//   501: journalctl not available on this system
+//   500: unexpected error starting the sync
 func (s *Server) handleSyncRun(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache, no-store")
@@ -342,7 +342,7 @@ func (s *Server) handleSyncRun(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.syncer.Sync(r.Context())
 	if err != nil {
-		// Never leak raw err.Error() to HTTP clients — it may contain
+		// Never leak raw err.Error() to HTTP clients. It may contain
 		// file paths, subprocess details, DB DSNs, or other internal
 		// state. Log the full error server-side, return a short
 		// category label to the client.

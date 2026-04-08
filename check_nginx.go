@@ -99,12 +99,12 @@ func (c *NginxChecker) checkConfig(ctx context.Context) CheckResult {
 	out := strings.TrimSpace(string(output))
 
 	if err != nil {
-		// nginx -t exits non-zero for reasons unrelated to config syntax —
-		// most commonly it cannot write the PID file or open a log file when
+		// nginx -t exits non-zero for reasons unrelated to config syntax.
+		// Most commonly it cannot write the PID file or open a log file when
 		// running inside a restricted environment (GCP VM, read-only /run,
 		// systemd sandbox). If the output explicitly confirms "syntax is ok"
 		// AND the only failure is a filesystem/permission error (EROFS, EACCES,
-		// ENOENT on /run or /var/log), treat it as fully OK — the config is valid.
+		// ENOENT on /run or /var/log), treat it as fully OK. The config is valid.
 		syntaxOK := strings.Contains(out, "syntax is ok")
 		fsError := strings.Contains(out, "Read-only file system") ||
 			strings.Contains(out, "Permission denied") ||

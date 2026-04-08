@@ -607,7 +607,7 @@ function renderHistoryBar(checks, history) {
     const det = detailsByDay[i];
     // Build a detailed tooltip. Explicit about provenance: this is what
     // WE recorded from checks, not what the OS log says.
-    let label = d.date + ' (UTC) — ' + (dayLabels[d.status] || d.status);
+    let label = d.date + ' (UTC): ' + (dayLabels[d.status] || d.status);
     if (det.critical.length > 0) label += '\nCritical: ' + det.critical.join(', ');
     if (det.warn.length > 0)     label += '\nWarn: ' + det.warn.join(', ');
     if (det.critical.length > 0 || det.warn.length > 0) {
@@ -633,8 +633,8 @@ function jumpToLogsForDay(date) {
     scrollToBucket(target.id);
     return;
   }
-  // Nothing for this day. Scroll to logs section without a modal —
-  // the sync button handles the "go fetch from the source of truth" flow.
+  // Nothing for this day. Scroll to logs section without a modal.
+  // The sync button handles the "go fetch from the source of truth" flow.
   const logsSection = document.querySelector('.logs-section');
   if (logsSection) {
     const y = logsSection.getBoundingClientRect().top + window.scrollY - stickyOffset();
@@ -655,7 +655,7 @@ function findBucketForDay(date) {
 }
 
 // Trigger a manual sync. Pulls from authoritative sources (systemd journal)
-// and rebuilds the log timeline. Single-flight on the server — concurrent
+// and rebuilds the log timeline. Single-flight on the server. Concurrent
 // clicks get a 409 Conflict, which we display as "already running".
 async function runSync() {
   const btn = document.getElementById('syncBtn');
@@ -734,7 +734,7 @@ async function refreshSyncStatus() {
       }
     }
   } catch (e) {
-    // Silently ignore — sync status is a nice-to-have
+    // Silently ignore. Sync status is a nice-to-have
   }
 }
 
@@ -787,7 +787,7 @@ async function loadI18n() {
 // Using UTC keeps bucket IDs consistent with the server's UTC history dates,
 // so clicking a history day block correctly maps to the right buckets
 // regardless of the viewer's timezone. The display label still renders
-// in local time — only the internal ID uses UTC.
+// in local time. Only the internal ID uses UTC.
 function floorTo15Min(date) {
   const d = new Date(date);
   d.setUTCMinutes(Math.floor(d.getUTCMinutes() / 15) * 15, 0, 0);
@@ -829,7 +829,7 @@ function scrollToBucket(id) {
 
 // Build the summary chips for a bucket. Each entry is already aggregated
 // server-side (one entry per unique title+source in this 15-min bucket),
-// so we use the .count field directly — a DDoS showing 1,245,000 errors
+// so we use the .count field directly. A DDoS showing 1,245,000 errors
 // is still just one chip displaying "×1245000".
 function buildChips(entries) {
   let html = '';
@@ -873,9 +873,9 @@ function buildBucketBody(entries) {
     if (isCheck) {
       // Observations from our periodic checks are not authoritative.
       // The Sync button brings in journal entries (source="journal") for
-      // independent verification — they show up as separate entries in
+      // independent verification. They show up as separate entries in
       // the same bucket with higher confidence.
-      html += `<div class="log-observe-note">Observation from a periodic check \u2014 look for matching <strong>journal</strong> entries in this bucket for authoritative confirmation.</div>`;
+      html += `<div class="log-observe-note">Observation from a periodic check. Look for matching <strong>journal</strong> entries in this bucket for authoritative confirmation.</div>`;
     }
     html += `</div>`;
   }
@@ -928,7 +928,7 @@ async function fetchLogs() {
       const timeDate = group.date.toLocaleDateString([], { month: 'short', day: 'numeric' });
       const timeLabel = timeDate + ' '
                       + group.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                      + ' \u2013 '
+                      + ' to '
                       + endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const openClass = wasOpen.has(id) ? ' open' : '';
       html += `<div class="log-bucket${openClass}" id="${escapeHtml(id)}">`;
@@ -1265,7 +1265,7 @@ function gDismissTooltip() {
 }
 
 function gUpdateTooltip(mouseX, mouseY, wrapW) {
-  if (gPinned) return; // pinned — don't move or hide
+  if (gPinned) return; // pinned, don't move or hide
   const tooltip = document.getElementById('metricsTooltip');
   const plotW   = wrapW - GC.ML - GC.MR;
   const plotH   = GH    - GC.MT - GC.MB;
@@ -1392,7 +1392,7 @@ function gInitEvents() {
   window.addEventListener('mousemove', e => {
     if (!gDragging) return;
     if (!gDragMoved) {
-      // First actual movement — now we know it's a drag, not a click
+      // First actual movement. Now we know it's a drag, not a click
       gDragMoved = true;
       if (!gPinned) { tooltip.style.display = 'none'; gHoverPoint = null; }
       canvas.style.cursor = 'grabbing';

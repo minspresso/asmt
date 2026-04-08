@@ -114,7 +114,7 @@ func (c *PostgreSQLChecker) Check(ctx context.Context) []CheckResult {
 		CheckedAt: time.Now(),
 	})
 
-	// Active connection count — requires pg_monitor role or superuser
+	// Active connection count: requires pg_monitor role or superuser
 	var activeConns int
 	connCtx, connCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer connCancel()

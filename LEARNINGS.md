@@ -16,8 +16,10 @@ A monitoring dashboard for a **single server** that is:
 - **Fast for humans** — answers "what went wrong and when?" in seconds.
 
 I picked **Go** because it compiles to a single static binary, starts in
-milliseconds, and gives tight memory control. Final result: **~9 MB steady,
-~14 MB peak** — lighter than almost every alternative on the market.
+milliseconds, and gives tight memory control. Final result on a production
+VM running nginx + WordPress + MariaDB + PHP-FPM: **~13 MB steady RSS,
+~16 MB peak** — well under the 15 MB / 50 MB goals, and lighter than almost
+every alternative on the market.
 
 ---
 
@@ -131,9 +133,9 @@ the moment when everything else is failing — and that's exactly when you
 need headroom. A generous limit costs **zero RSS** when idle (the runtime
 doesn't pre-allocate). It only matters during a crisis.
 
-Final settings: **9 MB typical, 14 MB peak, 64 MB ceiling.** The same
-principle applies anywhere: **size your fire exits for the worst day, not
-the average Tuesday.**
+Final settings on a real production VM: **~13 MB typical, ~16 MB peak,
+64 MiB soft ceiling.** The same principle applies anywhere: **size your
+fire exits for the worst day, not the average Tuesday.**
 
 ---
 
@@ -243,7 +245,7 @@ aggregation, journal sync, and alerting:
 
 | Tool | Typical RSS |
 |---|---|
-| **asmt (this project)** | **~9 MB steady, ~14 MB peak** |
+| **asmt (this project)** | **~13 MB steady, ~16 MB peak** |
 | collectd (C, no UI) | ~5–15 MB |
 | node_exporter (Prometheus) | ~15–30 MB |
 | Zabbix agent | ~10–20 MB |

@@ -132,7 +132,7 @@ func (mb *MetricsBuffer) saveToday(points []MetricPoint) {
 	if mb.store == nil || len(points) == 0 {
 		return
 	}
-	// 0750 dir, 0640 file — same rationale as HistoryStore.Save.
+	// 0750 dir, 0640 file, same rationale as HistoryStore.Save.
 	if err := os.MkdirAll(mb.store.dir, 0750); err != nil {
 		return
 	}

@@ -47,14 +47,14 @@ type LogPattern struct {
 	MitigateKey string // i18n key for the mitigation advice
 }
 
-// LogEntry represents one aggregated "incident" — all matches of the same
+// LogEntry represents one aggregated "incident": all matches of the same
 // error pattern within a single 15-minute bucket are rolled up into one entry.
 // This keeps memory bounded regardless of error rate: a DDoS producing 10,000
 // matches/second in a 15-min window still takes just one LogEntry.
 //
-//   - Timestamp: first occurrence time (stable — used for chronological sorting)
+//   - Timestamp: first occurrence time (stable, used for chronological sorting)
 //   - LastSeen:  most recent occurrence time in this bucket
-//   - Line:      sample log line (the first one observed — representative)
+//   - Line:      sample log line (the first one observed, representative)
 //   - Count:     total number of matches in this (bucket, title, source)
 type LogEntry struct {
 	Timestamp  time.Time `json:"timestamp"`
@@ -92,7 +92,7 @@ func bucketKeyFor(ts time.Time, title, source string) aggKey {
 // Design goals:
 //   - Memory is bounded by DIMENSIONS (time × error types), NOT by rate.
 //     A DDoS producing 1M matches/sec contributes ~1 entry per unique error
-//     per 15-min bucket — identical memory to a quiet server with the same
+//     per 15-min bucket, identical memory to a quiet server with the same
 //     error variety.
 //   - All entries from the last 7 days live in memory so range queries
 //     are pure in-memory operations (no disk reads, no JSON parsing).
@@ -102,7 +102,7 @@ func bucketKeyFor(ts time.Time, title, source string) aggKey {
 // Internals:
 //   - entries: slice of *LogEntry sorted by first-seen Timestamp.
 //     Pointers (not values) so the map and the slice share the same
-//     LogEntry instance — updating a count via the map is visible via
+//     LogEntry instance, updating a count via the map is visible via
 //     the slice without a second lookup.
 //   - keyed: map from aggKey to *LogEntry for O(1) aggregation lookups.
 type logBuffer struct {
@@ -361,7 +361,7 @@ type LogFileConfig struct {
 //   - Memory: 20000 entries × ~700 bytes ≈ 14MB hard ceiling.
 //     Typical server: <2000 entries, <2MB.
 //     A DDoS producing 1M matches/sec contributes the same memory as a
-//     quiet server with the same variety of errors — only count increases.
+//     quiet server with the same variety of errors. Only count increases.
 const (
 	logBufferMaxAge  = 7 * 24 * time.Hour
 	logBufferMaxSize = 20000
@@ -497,7 +497,7 @@ func parseLogTimestamp(line string) time.Time {
 			}
 		}
 	}
-	// Syslog: "Apr  6 15:10:23" — Go's "Jan  2" handles both space-padded and zero-padded days.
+	// Syslog: "Apr  6 15:10:23". Go's "Jan  2" handles both space-padded and zero-padded days.
 	if len(line) > 15 {
 		if t, err := time.Parse("Jan  2 15:04:05", line[:15]); err == nil {
 			t = t.AddDate(time.Now().Year(), 0, 0)
@@ -508,7 +508,7 @@ func parseLogTimestamp(line string) time.Time {
 }
 
 // matchLineEntry returns a LogEntry if the line matches a known pattern.
-// Does not add to the buffer — caller decides what to do with the result.
+// Does not add to the buffer. Caller decides what to do with the result.
 // Used by scanFileBatch for bulk-loading with dedup.
 func (lw *LogWatcher) matchLineEntry(line, source string, ts time.Time) (LogEntry, bool) {
 	for _, p := range lw.patterns {
@@ -539,7 +539,7 @@ func (lw *LogWatcher) GetEntries() []LogEntry {
 // RecordCheckResult records a check result (warn/critical) as a log entry.
 // This lets the "Log Warnings" section show a unified timeline of both
 // log-file pattern matches AND internal check state (disk, memory, load,
-// DB ping, SSL cert expiry, etc.) — anything tracked by the scheduler.
+// DB ping, SSL cert expiry, etc.), anything tracked by the scheduler.
 //
 // OK results are ignored. Aggregation handles high-frequency updates: a
 // check that's warn for an entire 15-min window becomes one entry with a
@@ -558,7 +558,7 @@ func (lw *LogWatcher) RecordCheckResult(r CheckResult) {
 	// Title = component name (e.g. "linux-disk", "mariadb-ping").
 	// Source = "check" so UI chips show "check · linux-disk ×N".
 	// Line = the check message (e.g. "/var: 86% used").
-	// Mitigation is empty — the check itself already describes the issue.
+	// Mitigation is empty. The check itself already describes the issue.
 	ts := r.CheckedAt
 	if ts.IsZero() {
 		ts = time.Now()
@@ -577,7 +577,7 @@ func (lw *LogWatcher) RecordCheckResult(r CheckResult) {
 }
 
 // GetEntriesSince returns log entries from the last d duration.
-// Pure in-memory operation — no disk reads. O(log n + k) where k is result size.
+// Pure in-memory operation, no disk reads. O(log n + k) where k is result size.
 func (lw *LogWatcher) GetEntriesSince(d time.Duration) []LogEntry {
 	return lw.buffer.EntriesSince(d)
 }
@@ -663,7 +663,7 @@ func (lw *LogWatcher) tailOnce(ctx context.Context, fc LogFileConfig) error {
 }
 
 // matchLine is called by tail goroutines for each new log line.
-// Uses time.Now() as the timestamp (monotonic — fast-path in buffer).
+// Uses time.Now() as the timestamp (monotonic, fast-path in buffer).
 // AddEvent aggregates by (bucket, title, source), so chatty errors
 // increment a counter instead of filling the buffer.
 func (lw *LogWatcher) matchLine(line, source string) {
@@ -704,7 +704,7 @@ func (lw *LogWatcher) saveLogs() {
 	}
 	lw.saveMu.Lock()
 	defer lw.saveMu.Unlock()
-	// 0750 dir, 0640 file — log entries may contain sample lines from
+	// 0750 dir, 0640 file. Log entries may contain sample lines from
 	// /var/log files that are typically root-readable only.
 	if err := os.MkdirAll(lw.store.dir, 0750); err != nil {
 		return

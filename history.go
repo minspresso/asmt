@@ -42,9 +42,9 @@ func NewHistoryStore(configPath string) *HistoryStore {
 //
 // Priority:
 //  1. GCP instance ID (changes when a new VM is created, even if the same
-//     disk is reattached — exactly what we need to detect VM migration)
+//     disk is reattached, exactly what we need to detect VM migration)
 //  2. /etc/machine-id (lives on disk, unchanged across reboots but also
-//     unchanged when the disk is moved to a new VM — not sufficient alone)
+//     unchanged when the disk is moved to a new VM, not sufficient alone)
 //  3. hostname as a last resort
 func readMachineID() string {
 	// Try GCP metadata server first (3-second timeout, non-blocking on non-GCP).
@@ -78,7 +78,7 @@ func readMachineID() string {
 // Load reads all valid history files and returns component history.
 //
 // Files whose machine_id does not match the current host are silently
-// ignored — this handles the case where the history directory is copied
+// ignored. This handles the case where the history directory is copied
 // to a new server: the new machine gets a clean slate automatically.
 //
 // Files older than historyRetentionDays are deleted during this pass.
@@ -87,7 +87,7 @@ func (hs *HistoryStore) Load() map[string][]HistoryDay {
 
 	entries, err := os.ReadDir(hs.dir)
 	if err != nil {
-		return result // directory doesn't exist yet — fine on first run
+		return result // directory doesn't exist yet, fine on first run
 	}
 
 	cutoff := time.Now().UTC().AddDate(0, 0, -historyRetentionDays).Format("2006-01-02")
@@ -115,7 +115,7 @@ func (hs *HistoryStore) Load() map[string][]HistoryDay {
 			continue
 		}
 
-		// Different machine — history doesn't apply to this server.
+		// Different machine. History doesn't apply to this server.
 		if f.MachineID != hs.machineID {
 			continue
 		}
@@ -140,12 +140,12 @@ func (hs *HistoryStore) Load() map[string][]HistoryDay {
 
 // Save atomically writes today's component statuses to disk.
 // Components with no data yet (status "unknown") are omitted.
-// Called after every check cycle — safe to call frequently.
+// Called after every check cycle, safe to call frequently.
 //
 // Data files are written with mode 0640 and the parent directory with
 // mode 0750: root (owner) can read/write, members of the root group
 // can read, everyone else is denied. These files contain machine ID,
-// the list of installed services, and daily status rollups — not
+// the list of installed services, and daily status rollups. Not
 // catastrophic to leak, but there's no reason for unprivileged users
 // on a multi-user system to read them.
 func (hs *HistoryStore) Save(history map[string][]HistoryDay) error {

@@ -109,7 +109,7 @@ func (c *RedisChecker) Check(ctx context.Context) []CheckResult {
 		CheckedAt: time.Now(),
 	}}
 
-	// INFO — parse used_memory_human and connected_clients
+	// INFO: parse used_memory_human and connected_clients
 	fmt.Fprintf(conn, "*1\r\n$4\r\nINFO\r\n")
 	header, err := r.ReadString('\n')
 	if err != nil || !strings.HasPrefix(header, "$") {

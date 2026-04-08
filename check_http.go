@@ -46,7 +46,7 @@ func (c *HTTPEndpointChecker) Name() string {
 }
 
 func (c *HTTPEndpointChecker) Check(ctx context.Context) []CheckResult {
-	// Reject non-HTTP URLs — an operator misconfig (or a hostile config
+	// Reject non-HTTP URLs. An operator misconfig (or a hostile config
 	// writer) otherwise lets us probe file://, unix://, etc.
 	if !isHTTPURL(c.cfg.URL) {
 		return []CheckResult{{

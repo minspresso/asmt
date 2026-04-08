@@ -160,7 +160,7 @@ func TestLogBufferSustained24h(t *testing.T) {
 		t.Errorf("throughput %.0f events/sec too slow (need >10k)", throughput)
 	}
 
-	// Heap growth should stay well under our GOMEMLIMIT of 32 MiB.
+	// Heap growth should stay well under our GOMEMLIMIT of 64 MiB.
 	if memGrowthMB > 50 {
 		t.Errorf("heap grew by %d MB, expected <50 MB", memGrowthMB)
 	}

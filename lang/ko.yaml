@@ -1,4 +1,4 @@
-# 한국어 번역 - Server-Stat
+# 한국어 번역 - asmt
 # 새로운 언어를 추가하려면 이 파일을 복사하여 모든 값을 번역하세요.
 # 파일 이름은 언어 코드와 일치해야 합니다 (예: ja.yaml, de.yaml).
 # %s, %d, %.2f 같은 형식 지정자는 번역된 문자열에 그대로 유지해야 합니다.
@@ -208,7 +208,7 @@ logs:
 alerts:
   status_change: "상태 변경"
   webhook_error: "웹훅 HTTP %d 반환"
-  email_subject: "[서버 상태] %s: %s → %s"
+  email_subject: "[asmt] %s: %s → %s"
   email_component: "구성 요소: %s"
   email_status: "상태: %s (이전: %s)"
   email_message: "메시지: %s"
@@ -218,7 +218,7 @@ alerts:
 server:
   starting: "서버 시작"
   shutting_down: "종료 중"
-  running: "Server-Stat 실행 중: %s"
+  running: "asmt 실행 중: %s"
   dashboard_url: "대시보드: http://%s"
   health_url: "상태 확인: http://%s/healthz"
   api_url: "API:       http://%s/api/status"

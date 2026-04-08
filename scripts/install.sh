@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Server-Stat installer
+# asmt installer
 # Works on: Debian/Ubuntu, RHEL/CentOS/Rocky/Fedora, Arch, Alpine, SUSE
 set -euo pipefail
 
@@ -236,7 +236,7 @@ fi
 # --- Create environment file for secrets (if it doesn't exist) ---
 if [ ! -f "${INSTALL_DIR}/env" ]; then
     cat > "${INSTALL_DIR}/env" << 'ENVFILE'
-# Secrets for Server-Stat — loaded by systemd EnvironmentFile.
+# Secrets for asmt — loaded by systemd EnvironmentFile.
 # This file persists across reboots. Restart the service after editing:
 #   sudo systemctl restart serverstat
 #
@@ -264,7 +264,7 @@ if [ "${INIT_SYSTEM}" = "systemd" ]; then
     [ -n "${READONLY_PATHS}" ] && READONLY_LINE="ReadOnlyPaths=${READONLY_PATHS}"
     cat > "/etc/systemd/system/${SERVICE_NAME}.service" << EOF
 [Unit]
-Description=Server-Stat Monitoring Service
+Description=asmt Monitoring Service
 After=network.target
 
 [Service]
@@ -302,7 +302,7 @@ elif [ "${INIT_SYSTEM}" = "openrc" ]; then
     cat > "/etc/init.d/${SERVICE_NAME}" << EOF
 #!/sbin/openrc-run
 
-description="Server-Stat Monitoring Service"
+description="asmt Monitoring Service"
 command="${INSTALL_DIR}/${BINARY_NAME}"
 command_args="-config ${INSTALL_DIR}/${CONFIG_FILE}"
 command_background=true

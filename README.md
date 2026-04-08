@@ -1,10 +1,16 @@
-# ASMT - Another Server Monitoring Tool
+# ASMT — Another Server Monitoring Tool
 
-A lightweight server monitoring tool built in Go. Single static binary (~9 MB), zero runtime dependencies, ~11 MB RSS. Auto-detects services and works across major Linux distributions.
+[![CI](https://github.com/minspresso/asmt/actions/workflows/ci.yml/badge.svg)](https://github.com/minspresso/asmt/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/minspresso/asmt)](https://goreportcard.com/report/github.com/minspresso/asmt)
+
+A lightweight Linux server monitoring tool built in Go. Single static binary (~9 MB), zero runtime dependencies, ~11 MB RSS at runtime. Auto-detects services and works across every major Linux distribution.
+
+> **Why another one?** asmt is designed to be a *smart lens on top of the OS journal*, not a replacement for it. It earns its existence by making existing truth easier to see — and it does so in roughly **one tenth the memory** of a typical agent. See [LEARNINGS.md](LEARNINGS.md) for the design story.
 
 ## What it does
 
-Server-Stat runs as a background service and continuously checks the health of your server's components. It exposes a live web dashboard and a JSON API so you can see the current state of everything at a glance.
+asmt runs as a background service and continuously checks the health of your server's components. It exposes a live web dashboard and a JSON API so you can see the current state of everything at a glance.
 
 ### What it monitors
 
@@ -85,11 +91,11 @@ Dashboard is at `http://localhost:8080` (localhost only by default).
 
 ---
 
-## Install from source (requires Go 1.21+)
+## Install from source (requires Go 1.22+)
 
 ```bash
-git clone https://github.com/your-org/server-stat.git
-cd server-stat
+git clone https://github.com/minspresso/asmt.git
+cd asmt
 
 make build          # produces ./serverstat binary
 sudo bash scripts/install.sh
@@ -182,10 +188,12 @@ Produces `serverstat-VERSION-linux-ARCH.tar.gz` containing the binary, scripts, 
 
 | Metric | Value |
 |--------|-------|
-| Binary size | ~4–5 MB (stripped) |
-| RSS at runtime | ~11 MB |
-| Memory hard cap | 50 MB |
+| Binary size | ~9 MB (stripped, static, no CGO) |
+| RSS at runtime (typical) | ~9 MB steady, ~14 MB peak |
+| GOMEMLIMIT (soft GC ceiling) | 64 MiB |
 | CPU | Negligible — checks run every 30 s |
+
+A "soft GC ceiling" of 64 MiB does **not** mean asmt reserves 64 MiB. The Go runtime uses it as a hint to garbage-collect more aggressively as the heap approaches that number. Idle RSS stays around 9 MB. The headroom only matters during a crisis — see the "memory ceiling lesson" in [LEARNINGS.md](LEARNINGS.md).
 
 ---
 
@@ -204,6 +212,14 @@ Makefile
 ```
 
 ---
+
+## Security
+
+Found a vulnerability? Please **do not** open a public issue. See [SECURITY.md](SECURITY.md) for the private disclosure process.
+
+## Contributing
+
+Pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening one — it covers the coding conventions, the test/lint commands CI runs, and the design principles asmt holds itself to.
 
 ## License
 

@@ -22,9 +22,16 @@ func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	flag.Parse()
 
-	// Cap Go runtime memory to 30MB.
-	// This controls GC aggressiveness - Go will GC more often to stay under this limit.
-	debug.SetMemoryLimit(30 * 1024 * 1024)
+	// Set a default GOMEMLIMIT only if the operator hasn't already set one
+	// via the environment. The Go runtime treats GOMEMLIMIT as a *soft* GC
+	// trigger, not an allocation reservation — a generous ceiling costs zero
+	// RSS at idle and gives the runtime headroom on the worst day, when
+	// buffers fill, the syncer is running, and the tail goroutines are busy.
+	// Realistic peak under load is ~14 MB; 64 MiB gives ~4× margin.
+	// See LEARNINGS.md → "The memory ceiling lesson" for the full story.
+	if os.Getenv("GOMEMLIMIT") == "" {
+		debug.SetMemoryLimit(64 * 1024 * 1024)
+	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 

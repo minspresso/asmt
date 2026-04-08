@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Server-Stat uninstaller
+# asmt uninstaller
 set -euo pipefail
 
 INSTALL_DIR="/opt/serverstat"
@@ -16,7 +16,7 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || error "This script must be run as root (use sudo)"
 
-echo "This will remove Server-Stat from this system."
+echo "This will remove asmt from this system."
 echo ""
 echo "  Binary:  ${INSTALL_DIR}/serverstat"
 echo "  Config:  ${INSTALL_DIR}/config.yaml"
@@ -63,4 +63,4 @@ else
 fi
 
 echo ""
-info "Server-Stat has been completely uninstalled."
+info "asmt has been completely uninstalled."

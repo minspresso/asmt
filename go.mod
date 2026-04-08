@@ -1,4 +1,4 @@
-module github.com/minspresso/server-stat
+module github.com/minspresso/asmt
 
 go 1.22
 

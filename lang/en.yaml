@@ -1,4 +1,4 @@
-# English translations for Server-Stat
+# English translations for asmt
 # To add a new language, copy this file and translate all values.
 # File name must match the language code (e.g., ko.yaml, ja.yaml, de.yaml).
 # Format verbs like %s, %d, %.2f must remain in the translated strings.
@@ -212,7 +212,7 @@ logs:
 alerts:
   status_change: "status change"
   webhook_error: "webhook returned HTTP %d"
-  email_subject: "[Server-Stat] %s: %s → %s"
+  email_subject: "[asmt] %s: %s → %s"
   email_component: "Component: %s"
   email_status: "Status: %s (was %s)"
   email_message: "Message: %s"
@@ -222,7 +222,7 @@ alerts:
 server:
   starting: "starting server"
   shutting_down: "shutting down"
-  running: "Server-Stat running on %s"
+  running: "asmt running on %s"
   dashboard_url: "Dashboard: http://%s"
   health_url: "Health:    http://%s/healthz"
   api_url: "API:       http://%s/api/status"

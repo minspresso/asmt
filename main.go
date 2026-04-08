@@ -272,7 +272,7 @@ func main() {
 	}
 
 	// Loud warning if the tool is configured to listen on a non-loopback
-	// address. asmt has NO built-in authentication; operators who bind
+	// address. ASMT has NO built-in authentication; operators who bind
 	// outside 127.0.0.1 must put a reverse proxy with auth in front of it.
 	// We can't refuse to start — some operators intentionally expose via a
 	// trusted private network — but we make absolutely sure the operator

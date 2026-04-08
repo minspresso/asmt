@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# asmt installer
+# ASMT installer
 # Works on: Debian/Ubuntu, RHEL/CentOS/Rocky/Fedora, Arch, Alpine, SUSE
 set -euo pipefail
 
@@ -64,7 +64,7 @@ detect_phpfpm() {
 
 detect_ssl_domains() {
     local domains=""
-    # Grep server_name from nginx sites-enabled — install-time only, not runtime.
+    # Grep server_name from nginx sites-enabled (install-time only, not runtime).
     # Skips catch-all (_), localhost, and IPs. Returns up to 10 real domain names.
     if [ -d /etc/nginx/sites-enabled ]; then
         domains=$(grep -rh "server_name" /etc/nginx/sites-enabled/ 2>/dev/null \
@@ -236,7 +236,7 @@ fi
 # --- Create environment file for secrets (if it doesn't exist) ---
 if [ ! -f "${INSTALL_DIR}/env" ]; then
     cat > "${INSTALL_DIR}/env" << 'ENVFILE'
-# Secrets for asmt — loaded by systemd EnvironmentFile.
+# Secrets for ASMT, loaded by systemd EnvironmentFile.
 # This file persists across reboots. Restart the service after editing:
 #   sudo systemctl restart serverstat
 #
@@ -264,7 +264,7 @@ if [ "${INIT_SYSTEM}" = "systemd" ]; then
     [ -n "${READONLY_PATHS}" ] && READONLY_LINE="ReadOnlyPaths=${READONLY_PATHS}"
     cat > "/etc/systemd/system/${SERVICE_NAME}.service" << EOF
 [Unit]
-Description=asmt Monitoring Service
+Description=ASMT Monitoring Service
 After=network.target
 
 [Service]
@@ -278,7 +278,7 @@ EnvironmentFile=-${INSTALL_DIR}/env
 Environment="GOGC=50"
 # GOMEMLIMIT is a soft GC trigger, NOT an allocation reservation.
 # Setting it generously costs zero bytes of RSS in normal operation,
-# and gives the runtime headroom when the tool needs to work hardest —
+# and gives the runtime headroom when the tool needs to work hardest,
 # under incident conditions where buffers fill, sync is running, and
 # the tail goroutines are busy. Realistic worst-case peak is ~40 MB
 # (runtime + buffer-at-cap + sync burst); 64 MiB gives 1.6× margin.
@@ -302,7 +302,7 @@ elif [ "${INIT_SYSTEM}" = "openrc" ]; then
     cat > "/etc/init.d/${SERVICE_NAME}" << EOF
 #!/sbin/openrc-run
 
-description="asmt Monitoring Service"
+description="ASMT Monitoring Service"
 command="${INSTALL_DIR}/${BINARY_NAME}"
 command_args="-config ${INSTALL_DIR}/${CONFIG_FILE}"
 command_background=true
@@ -311,7 +311,7 @@ output_log="/var/log/${SERVICE_NAME}.log"
 error_log="/var/log/${SERVICE_NAME}.log"
 
 # GC tuning (match systemd Environment settings).
-# GOMEMLIMIT is a soft GC trigger, not an allocation reservation — generous
+# GOMEMLIMIT is a soft GC trigger, not an allocation reservation. Generous
 # limits give breathing room under incident load without costing RSS when idle.
 export GOGC=50
 export GOMEMLIMIT=64MiB

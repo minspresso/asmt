@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-asmt is pre-1.0. Only the latest tagged release on `main` receives security fixes.
+ASMT is pre-1.0. Only the latest tagged release on `main` receives security fixes.
 
 | Version | Supported |
 |---------|-----------|
@@ -49,23 +49,23 @@ In scope:
 
 Out of scope:
 
-- Vulnerabilities in third-party software asmt monitors (nginx, MariaDB,
-  Redis, etc.) — please report those upstream.
+- Vulnerabilities in third-party software ASMT monitors (nginx, MariaDB,
+  Redis, and so on). Please report those upstream.
 - Self-inflicted misconfigurations such as exposing the dashboard on a public
-  interface without an authenticating reverse proxy. asmt logs a loud warning
+  interface without an authenticating reverse proxy. ASMT logs a loud warning
   in this case but cannot prevent it.
 - Issues that require an attacker to already have root on the host running
-  asmt.
+  ASMT.
 
 ## Hardening notes for operators
 
 - The dashboard binds to `127.0.0.1:8080` by default and has **no built-in
   authentication**. If you bind to a non-loopback interface, you **must** put
-  an authenticating reverse proxy in front of it (HTTP Basic Auth at the
-  proxy is the recommended minimum — see
-  [LEARNINGS.md → "the auth lesson"](LEARNINGS.md#the-auth-lesson-dont-make-the-tool-depend-on-the-thing-it-monitors)).
+  an authenticating reverse proxy in front of it. HTTP Basic Auth at the
+  proxy is the recommended minimum (see
+  [LEARNINGS.md "the auth lesson"](LEARNINGS.md#the-auth-lesson-dont-make-the-tool-depend-on-the-thing-it-monitors)).
 - Keep secrets in `/opt/serverstat/env` (chmod 600), never in `config.yaml`.
 - The one-line installer verifies the SHA-256 checksum of the release
   archive before installing. Do not bypass this check.
-- Run `govulncheck ./...` and `golangci-lint run` if you build from source —
+- Run `govulncheck ./...` and `golangci-lint run` if you build from source.
   CI runs both on every commit.

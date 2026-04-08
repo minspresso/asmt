@@ -1,6 +1,6 @@
 # LEARNINGS
 
-The design journey of **asmt**, a lightweight Linux server monitoring
+The design journey of **ASMT**, a lightweight Linux server monitoring
 dashboard. Written in plain language for leadership, recruiters, and anyone
 curious about the engineering decisions behind it.
 
@@ -33,7 +33,7 @@ know where five different logs live, how to read each format, and how to
 correlate them by time. That's a skill that takes years to build, and it
 burns precious incident-response minutes on every outage.
 
-**asmt's value is time saved during incidents.** It knows where every
+**ASMT's value is time saved during incidents.** It knows where every
 source of truth lives and assembles them into one timeline anyone can read.
 
 ---
@@ -96,7 +96,7 @@ Two ways to record it:
   one piece of paper. You lose the per-customer breakdown, but that's not
   what anyone needs to know.
 
-asmt uses the second approach. **One entry per (15-minute window × error
+ASMT uses the second approach. **One entry per (15-minute window × error
 type),** with a counter. The result:
 
 | Server load | Raw events/day | Stored entries | Memory |
@@ -183,7 +183,7 @@ to a normal user.
 
 ## The auth lesson: don't make the tool depend on the thing it monitors
 
-The first real deployment of asmt put `/stats.html` behind WordPress's
+The first real deployment of ASMT put `/stats.html` behind WordPress's
 existing admin session. The reasoning sounded clean: the operator was
 already logged in, so reuse that session. Single sign-on, no extra
 password, no separate user database.
@@ -246,14 +246,14 @@ rules, because HTTP Basic Auth headers are short and structured.
 
 ---
 
-## How asmt compares
+## How ASMT compares
 
 For a tool that includes a built-in dashboard, metrics history, log
 aggregation, journal sync, and alerting:
 
 | Tool | Typical RSS |
 |---|---|
-| **asmt (this project)** | **~13 MB steady, ~16 MB peak** |
+| **ASMT (this project)** | **~13 MB steady, ~16 MB peak** |
 | collectd (C, no UI) | ~5 to 15 MB |
 | node_exporter (Prometheus) | ~15 to 30 MB |
 | Zabbix agent | ~10 to 20 MB |

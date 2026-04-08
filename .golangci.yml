@@ -1,4 +1,4 @@
-# golangci-lint configuration for asmt.
+# golangci-lint configuration for ASMT.
 # Goal: catch bugs and security issues without excessive stylistic nagging.
 
 run:

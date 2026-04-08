@@ -1,12 +1,12 @@
-# Contributing to asmt
+# Contributing to ASMT
 
-Thanks for your interest in asmt. This document covers the practical things
+Thanks for your interest in ASMT. This document covers the practical things
 you need to know to land a change.
 
 ## Before you start
 
 - For anything larger than a typo or a small bug fix, please open an issue
-  first to discuss the approach. asmt has a strong design philosophy
+  first to discuss the approach. ASMT has a strong design philosophy
   (see [LEARNINGS.md](LEARNINGS.md)) and a change that conflicts with it
   may be hard to merge even if the code is clean.
 - For security issues, **do not** open a public issue.
@@ -14,7 +14,7 @@ you need to know to land a change.
 
 ## Design principles
 
-asmt holds itself to the rules in
+ASMT holds itself to the rules in
 [LEARNINGS.md → "Design principles"](LEARNINGS.md#design-principles-the-rules-id-ship-today).
 The most load-bearing ones for contributors are:
 
@@ -31,8 +31,8 @@ If your change violates one of these, expect a long review.
 
 ## Development setup
 
-Requirements: **Go 1.22+** and a Linux host (or a container) for testing
-the OS-specific checkers.
+Requirements: **Go 1.22 or later** and a Linux host (or a container) for
+testing the OS-specific checkers.
 
 ```bash
 git clone https://github.com/minspresso/asmt.git
@@ -63,12 +63,13 @@ The lint config is in `.golangci.yml`. The CI workflow is
 
 ## Coding conventions
 
-- **Single flat `package main`.** asmt is intentionally not split into
-  internal packages — the whole tool is ~3,500 lines and the flat layout
-  keeps it grep-able. Don't introduce subpackages without discussing first.
+- **Single flat `package main`.** ASMT is intentionally not split into
+  internal packages. The whole tool is about 3,500 lines and the flat
+  layout keeps it grep-able. Don't introduce subpackages without
+  discussing first.
 - **No external runtime dependencies.** A pull request that adds a new
   module to `go.mod` needs a strong justification. The current dependency
-  set is `gopkg.in/yaml.v3` and `github.com/go-sql-driver/mysql` — that's
+  set is `gopkg.in/yaml.v3` and `github.com/go-sql-driver/mysql`. That is
   the bar.
 - **No CGO.** Builds use `CGO_ENABLED=0` so the binary stays a single
   static file that runs on any glibc/musl distro.
@@ -79,14 +80,14 @@ The lint config is in `.golangci.yml`. The CI workflow is
   Go source for anything that reaches the dashboard or alert messages.
 - **Translations.** If you add an English string, add the Korean
   equivalent in the same PR. Machine translation is fine as a first
-  pass — a native speaker will review.
+  pass. A native speaker will review it.
 - **Comments explain *why*, not *what*.** The code already says what.
   Comments earn their keep by recording the reason a decision was made,
   especially anything counterintuitive.
 
 ## Adding a new checker
 
-1. Create `check_<name>.go` next to the existing checkers — copy the
+1. Create `check_<name>.go` next to the existing checkers. Copy the
    shape of `check_redis.go` or `check_postgres.go`.
 2. Implement the `Checker` interface from `checker.go`.
 3. Register it in `main.go` behind a config flag (`cfg.Checks.<Name>.Enabled`).

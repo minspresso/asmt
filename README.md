@@ -4,6 +4,10 @@
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/minspresso/asmt)](https://goreportcard.com/report/github.com/minspresso/asmt)
 
+![ASMT dashboard](docs/dashboard.jpg)
+
+*Live dashboard on a production Debian VM. Every panel is real data; no synthetic placeholders. Two SSL certificate rows are redacted; everything else is exactly what an operator sees.*
+
 A lightweight Linux server monitoring tool built in Go. Single static binary (~8 MB), zero runtime dependencies, ~13 MB RSS at runtime. Auto-detects services and works across every major Linux distribution.
 
 > **Why another one?** ASMT is designed to be a *smart lens on top of the OS journal*, not a replacement for it. It earns its existence by making existing truth easier to see, and it does so in roughly **one tenth the memory** of a typical agent. See [LEARNINGS.md](LEARNINGS.md) for the design story.

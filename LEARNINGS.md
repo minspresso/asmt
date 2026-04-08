@@ -1,6 +1,6 @@
 # LEARNINGS
 
-The design journey of **asmt** — a lightweight Linux server monitoring
+The design journey of **asmt**, a lightweight Linux server monitoring
 dashboard. Written in plain language for leadership, recruiters, and anyone
 curious about the engineering decisions behind it.
 
@@ -10,15 +10,15 @@ curious about the engineering decisions behind it.
 
 A monitoring dashboard for a **single server** that is:
 
-- **Trivial to install** — one command, auto-detects everything.
-- **Tiny** — under 15 MB of memory in normal use, never more than 50 MB.
-- **Honest** — shows what's actually happening, never invents data.
-- **Fast for humans** — answers "what went wrong and when?" in seconds.
+- **Trivial to install.** One command, auto-detects everything.
+- **Tiny.** Under 15 MB of memory in normal use, never more than 50 MB.
+- **Honest.** Shows what's actually happening, never invents data.
+- **Fast for humans.** Answers "what went wrong and when?" in seconds.
 
 I picked **Go** because it compiles to a single static binary, starts in
 milliseconds, and gives tight memory control. Final result on a production
-VM running nginx + WordPress + MariaDB + PHP-FPM: **~13 MB steady RSS,
-~16 MB peak** — well under the 15 MB / 50 MB goals, and lighter than almost
+VM running nginx, WordPress, MariaDB, and PHP-FPM: **~13 MB steady RSS,
+~16 MB peak**. Well under the 15 MB / 50 MB goals, and lighter than almost
 every alternative on the market.
 
 ---
@@ -52,9 +52,10 @@ It was wrong for three reasons:
 3. **Our cache was masquerading as truth.** A bug in our recording would
    silently make the dashboard wrong, and there'd be no way to spot it.
 
-To paper over the gaps, I almost shipped something even worse: **synthetic
-log entries** that filled missing days with "average" placeholders. That's
-not a cache mistake — that's lying to the user with made-up data.
+To hide those gaps, I almost shipped something worse. If a day had no data
+in our buffer, the dashboard was going to quietly fill it in with a fake
+entry containing typical values, so the chart always looked complete. That
+is not a cache bug. That is showing the user numbers that never happened.
 
 The right model came next:
 
@@ -65,7 +66,7 @@ In practice this meant:
 
 - The OS journal and software logs are always authoritative.
 - Our buffer is a cache. If it loses data, the OS still has the original.
-- Missing data is shown as missing — never as a fabricated entry.
+- Missing data is shown as missing, never as a fabricated entry.
 - Our own observations are explicitly labeled as such, distinct from
   records pulled from the journal.
 
@@ -118,9 +119,12 @@ the design target** before becoming the bottleneck.
 
 ## The memory ceiling lesson
 
-I tuned the memory ceiling aggressively at first — 10 MB, then 12 MB.
-"Smaller is better, right?" Then I ran a stress test and it thrashed,
-spiking to 72 MB anyway because the limit was a soft hint, not a hard cap.
+I tuned the memory ceiling aggressively at first: 10 MB, then 12 MB.
+"Smaller is better, right?" Then I ran a stress test. The tool spiked
+to 72 MB anyway and spent most of its time on garbage collection
+instead of real work, because Go's memory limit is a hint that makes
+the collector run more often, not a hard ceiling that blocks further
+allocation.
 
 I overcorrected to 64 MB. When the actual peak settled at 14 MB, I tried to
 lower it back to 32 MB. A design review caught me:
@@ -129,7 +133,7 @@ lower it back to 32 MB. A design review caught me:
 
 That reframing changed everything. For a normal app, the memory ceiling is
 about preventing waste. For a **monitoring tool**, the ceiling exists for
-the moment when everything else is failing — and that's exactly when you
+the moment when everything else is failing, and that is exactly when you
 need headroom. A generous limit costs **zero RSS** when idle (the runtime
 doesn't pre-allocate). It only matters during a crisis.
 
@@ -142,8 +146,8 @@ fire exits for the worst day, not the average Tuesday.**
 ## Security: locked doors before opening the building
 
 Before publishing as open source, I commissioned a thorough security audit.
-Eighteen findings came back — none critical, but worth fixing before any
-stranger downloaded the tool. The philosophy is the same as the memory work:
+Eighteen findings came back, none critical, but all worth fixing before
+any stranger downloaded the tool. The philosophy is the same as the memory work:
 
 > **A monitoring tool has to work hardest when everything else is failing.
 > That's also when an attacker is most likely to be probing. The defenses
@@ -170,8 +174,8 @@ The fixes fell into a few categories:
   build, tests, a vulnerability scanner, and a linter on every commit.
 
 The deeper lesson: **security isn't a feature you bolt on at the end.**
-It's the same discipline as bounded memory and graceful failure handling —
-assume the worst, write the test for it, make the safe behavior the
+It is the same discipline as bounded memory and graceful failure handling.
+Assume the worst, write the test for it, make the safe behavior the
 default. All 18 fixes took about an hour. None changed how the tool feels
 to a normal user.
 
@@ -181,7 +185,7 @@ to a normal user.
 
 The first real deployment of asmt put `/stats.html` behind WordPress's
 existing admin session. The reasoning sounded clean: the operator was
-already logged in, so reuse that session — single sign-on, no extra
+already logged in, so reuse that session. Single sign-on, no extra
 password, no separate user database.
 
 It failed in two ways that only became visible during real incidents:
@@ -193,25 +197,27 @@ to the health of the thing it was supposed to be monitoring. The
 worst-day principle applies to authentication too: if your auth path can
 fail under load, your dashboard fails under load.
 
-**2. The WAF flagged the host application's session cookie as a scanner
-token.** WordPress session cookies are 200+ bytes of high-entropy hex —
-exactly what cloud WAF scanner-detection rules are tuned to catch. The
-day a stricter WAF rule went live, every logged-in admin started seeing
-404s on the dashboard URL while anonymous visitors saw normal pages.
-Hours of debugging later, the cause was "your cookie looks like an
-attack signature."
+**2. The cloud firewall mistook the login cookie for an attack.**
+WordPress login cookies are a long string of random-looking characters.
+That is also what automated attack tools look like to a cloud firewall,
+so "suspicious-looking cookie" rules tend to catch both. The day a
+stricter rule went live, every logged-in admin started seeing 404s on
+the dashboard URL while anonymous visitors saw the normal pages. Hours
+of debugging later, the cause was: "your login cookie looks like an
+attack signature to the firewall."
 
 The fix in both cases was the same: **decouple.** Replace the
 auth-via-host-app with HTTP Basic Auth at the reverse proxy. Two lines
 of nginx config, one flat password file, zero PHP, zero database, zero
 cookie. Now the dashboard works during a host-app outage, works with no
-host app at all, and is invisible to WAF cookie heuristics because Basic
-Auth headers are short and structured.
+host app at all, and does not trip the cloud firewall's "suspicious cookie"
+rules, because HTTP Basic Auth headers are short and structured.
 
-> **A monitoring tool's auth should depend on as few things as possible
-> — ideally only the kernel and the reverse proxy already in front of
-> it. Each extra component in the auth chain is one more thing that can
-> fail exactly when you most need the dashboard to work.**
+> **A monitoring tool's authentication should depend on as few things as
+> possible. Ideally only the kernel and the reverse proxy already in
+> front of it. Each extra component in the authentication chain is one
+> more thing that can fail exactly when you most need the dashboard to
+> work.**
 
 ---
 
@@ -221,12 +227,14 @@ Auth headers are short and structured.
 2. **Never invent data.** Missing is information; faking is a lie.
 3. **Label everything.** "Observation" vs "OS record" matters.
 4. **Validate every input.** Especially before passing to a subprocess.
-5. **Bound every subprocess.** Time, output size, line count — all capped.
+5. **Bound every subprocess.** Cap the time it can run, how much it can
+   print, and how many lines you will read from it.
 6. **Stream, don't accumulate.** Process one item, throw it away, repeat.
 7. **Aggregate on write, not on read.** Memory bounded by dimensions, not
    by event rate.
-8. **Single-flight expensive operations.** Don't let busy users DoS
-   themselves.
+8. **Only run one copy of an expensive operation at a time.** If ten
+   users click "sync" at once, run it once and share the result, so
+   impatient users cannot accidentally overload their own server.
 9. **Optimize the ceiling for the worst case, usage for the typical case.**
 10. **Degrade gracefully.** No feature should require the perfect
     environment.
@@ -246,14 +254,14 @@ aggregation, journal sync, and alerting:
 | Tool | Typical RSS |
 |---|---|
 | **asmt (this project)** | **~13 MB steady, ~16 MB peak** |
-| collectd (C, no UI) | ~5–15 MB |
-| node_exporter (Prometheus) | ~15–30 MB |
-| Zabbix agent | ~10–20 MB |
-| Glances (Python) | ~20–50 MB |
-| telegraf | ~30–80 MB |
-| New Relic agent | ~50–100 MB |
-| Datadog agent | ~80–150 MB |
-| Netdata | ~50–200 MB |
+| collectd (C, no UI) | ~5 to 15 MB |
+| node_exporter (Prometheus) | ~15 to 30 MB |
+| Zabbix agent | ~10 to 20 MB |
+| Glances (Python) | ~20 to 50 MB |
+| telegraf | ~30 to 80 MB |
+| New Relic agent | ~50 to 100 MB |
+| Datadog agent | ~80 to 150 MB |
+| Netdata | ~50 to 200 MB |
 
 Being lighter than almost every alternative is a direct consequence of the
 design choices above: aggregation instead of accumulation, streaming instead
@@ -269,7 +277,7 @@ The single most valuable lesson from this project wasn't technical:
 > easier to see, not by claiming to be a new kind of truth.**
 
 Linux already keeps excellent records. Operators don't have a data
-problem — they have a **findability problem**. Solving findability in a
+problem, they have a **findability problem**. Solving findability in a
 lightweight, honest, resilient way is a meaningful contribution. Catching
 the wrong instinct early (by listening to good design critique instead of
 defending the original idea) was the most important course-correction of

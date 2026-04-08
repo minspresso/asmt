@@ -1,0 +1,64 @@
+# Dependabot configuration for ASMT.
+#
+# Why this exists: every dependency we ship is one more thing that can rot
+# silently. Dependabot opens a PR every time a watched ecosystem ships an
+# update, so the maintainer never has to remember to check.
+#
+# Conservative defaults: weekly cadence, small batch sizes, grouped by
+# ecosystem so we get one PR per category instead of a swarm.
+#
+# Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+
+updates:
+  # Go module dependencies (go.mod, go.sum). Currently a tiny set:
+  # gopkg.in/yaml.v3, github.com/go-sql-driver/mysql, plus indirect.
+  # Patches and minor versions get rolled up into a single PR each week
+  # to minimize CI churn. Major version bumps land as separate PRs so
+  # they get individual review (a Go major bump can be a behavior change).
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "go"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      go-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions versions in .github/workflows/. Catches things like
+  # "actions/checkout@v4 -> v5" and the "Node 20 -> Node 24" runtime
+  # transition that keeps appearing as a deprecation warning in CI logs.
+  # Same weekly cadence and grouping rationale as gomod.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"

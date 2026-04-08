@@ -121,9 +121,7 @@ func parseNginxDomains(data []byte) []string {
 		if strings.HasPrefix(line, "server_name") {
 			rest := strings.TrimPrefix(line, "server_name")
 			rest = strings.TrimRight(rest, ";")
-			for _, name := range strings.Fields(rest) {
-				current.serverNames = append(current.serverNames, name)
-			}
+			current.serverNames = append(current.serverNames, strings.Fields(rest)...)
 		}
 
 		// End of server block

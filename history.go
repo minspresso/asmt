@@ -180,10 +180,12 @@ func (hs *HistoryStore) Save(history map[string][]HistoryDay) error {
 		return err
 	}
 
-	// Atomic write: temp file + rename to avoid partial reads.
+	// Atomic write: temp file + rename to avoid partial reads. 0600 keeps
+	// history files readable only by the serverstat user (no group/other),
+	// matching the security audit's "data files as private mail" rule.
 	path := filepath.Join(hs.dir, today+".json")
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0640); err != nil {
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)

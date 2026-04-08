@@ -44,7 +44,11 @@ func NewWordPressChecker(url, expectBody string, tlsSkipVerify bool, tr *Transla
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
-				TLSClientConfig:   &tls.Config{InsecureSkipVerify: tlsSkipVerify},
+				// InsecureSkipVerify is operator-controlled (config key
+				// `wordpress.tls_skip_verify`) and defaults to false. The
+				// only case for enabling it is monitoring an internal
+				// WordPress install behind a self-signed certificate.
+				TLSClientConfig:   &tls.Config{InsecureSkipVerify: tlsSkipVerify, MinVersion: tls.VersionTLS12}, //nolint:gosec // G402: opt-in via tls_skip_verify
 				MaxIdleConns:      4,
 				IdleConnTimeout:   60 * time.Second,
 				DisableKeepAlives: false,

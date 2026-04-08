@@ -60,7 +60,6 @@ import (
 	"io"
 	"log/slog"
 	"os/exec"
-	"regexp"
 	"runtime"
 	"runtime/debug"
 	"strconv"
@@ -75,10 +74,6 @@ var (
 	ErrSyncInProgress        = errors.New("sync already in progress")
 	ErrInvalidDate           = errors.New("date must be in YYYY-MM-DD format")
 )
-
-// strictDateRe enforces exact YYYY-MM-DD for any optional date input.
-// Prevents argument injection into the journalctl subprocess.
-var strictDateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 // Sync tunables.
 const (

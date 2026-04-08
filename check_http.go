@@ -31,7 +31,11 @@ func NewHTTPEndpointChecker(cfg HTTPEndpointConfig, tr *Translations) *HTTPEndpo
 		client: &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: cfg.TLSSkipVerify},
+				// InsecureSkipVerify is operator-controlled per endpoint and
+				// defaults to false. Operators monitoring internal services
+				// with self-signed certificates can opt in via the endpoint
+				// config. Documented in README "Configuration".
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: cfg.TLSSkipVerify, MinVersion: tls.VersionTLS12}, //nolint:gosec // G402: opt-in per-endpoint
 				MaxIdleConns:    4,
 				IdleConnTimeout: 60 * time.Second,
 			},

@@ -62,3 +62,11 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # golangci-lint-action v8 ships golangci-lint v2, which has a
+      # completely new (incompatible) config schema. Migrating
+      # .golangci.yml from v1 to v2 is a separate, deliberate task;
+      # we do not want a weekly dependabot PR proposing it. Pin to
+      # the v6 major line until we are ready to migrate.
+      - dependency-name: "golangci/golangci-lint-action"
+        update-types: ["version-update:semver-major"]

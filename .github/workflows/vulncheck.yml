@@ -1,0 +1,50 @@
+name: Vulncheck (nightly)
+
+# Scheduled govulncheck run, separate from the per-push CI workflow.
+#
+# Why this exists: CI's govulncheck step is intentionally non-blocking
+# (continue-on-error: true) so that a freshly-disclosed stdlib CVE does
+# not turn the README badge red overnight. But we still want to KNOW
+# when govulncheck starts complaining, so this workflow runs the same
+# check on a daily cron and notifies the maintainer via the standard
+# GitHub Actions failure email when something needs attention.
+#
+# How to respond to a failure here:
+#   1. Read the job log to see which CVEs were flagged.
+#   2. Run `go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...`
+#      locally to confirm.
+#   3. If they are stdlib CVEs, the fix is usually "wait for the next
+#      Go patch release, then re-run". The CI workflow uses go-version
+#      "stable", so the next push to main will pick up the fix
+#      automatically.
+#   4. If they are in a third-party dependency, run `go get -u <module>`
+#      and `go mod tidy`, then commit.
+
+on:
+  schedule:
+    # 06:00 UTC every day. Picked off-peak to avoid contention with
+    # weekday morning Actions traffic and to give Go a few hours to
+    # ship a patch after a typical CVE disclosure window.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...

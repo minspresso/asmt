@@ -67,5 +67,13 @@ Out of scope:
 - Keep secrets in `/opt/serverstat/env` (chmod 600), never in `config.yaml`.
 - The one-line installer verifies the SHA-256 checksum of the release
   archive before installing. Do not bypass this check.
-- Run `govulncheck ./...` and `golangci-lint run` if you build from source.
-  CI runs both on every commit.
+- Run `govulncheck ./...` and `golangci-lint run` if you build from
+  source. `golangci-lint` is a hard CI gate on every push.
+  `govulncheck` runs in two places:
+  1. On every push as an **advisory** step in the main CI workflow.
+     Findings appear in the job log, but the step is marked
+     `continue-on-error: true` so a freshly-disclosed stdlib CVE
+     cannot turn the README badge red overnight.
+  2. As a **gating** nightly run (`vulncheck.yml`) that emails the
+     maintainer on failure. This is the channel that will surface
+     "you should bump Go" on a real vulnerability disclosure.

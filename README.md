@@ -1,4 +1,4 @@
-# ASMT — Another Server Monitoring Tool
+# ASMT: Another Server Monitoring Tool
 
 [![CI](https://github.com/minspresso/asmt/actions/workflows/ci.yml/badge.svg)](https://github.com/minspresso/asmt/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
@@ -6,11 +6,11 @@
 
 A lightweight Linux server monitoring tool built in Go. Single static binary (~8 MB), zero runtime dependencies, ~13 MB RSS at runtime. Auto-detects services and works across every major Linux distribution.
 
-> **Why another one?** asmt is designed to be a *smart lens on top of the OS journal*, not a replacement for it. It earns its existence by making existing truth easier to see — and it does so in roughly **one tenth the memory** of a typical agent. See [LEARNINGS.md](LEARNINGS.md) for the design story.
+> **Why another one?** ASMT is designed to be a *smart lens on top of the OS journal*, not a replacement for it. It earns its existence by making existing truth easier to see, and it does so in roughly **one tenth the memory** of a typical agent. See [LEARNINGS.md](LEARNINGS.md) for the design story.
 
 ## What it does
 
-asmt runs as a background service and continuously checks the health of your server's components. It exposes a live web dashboard and a JSON API so you can see the current state of everything at a glance.
+ASMT runs as a background service and continuously checks the health of your server's components. It exposes a live web dashboard and a JSON API so you can see the current state of everything at a glance.
 
 ### What it monitors
 
@@ -36,7 +36,7 @@ asmt runs as a background service and continuously checks the health of your ser
 | `GET /` | Web dashboard (auto-refreshes every 5 s) |
 | `GET /api/status` | Full JSON status of all components |
 | `GET /api/logs` | Recent log warnings with mitigation advice |
-| `GET /healthz` | Load balancer health check — `200 OK` or `503` |
+| `GET /healthz` | Load balancer health check (`200 OK` or `503`) |
 
 ### Supported Linux distributions
 
@@ -85,7 +85,7 @@ sudo rc-update add serverstat default
 sudo rc-service serverstat start
 ```
 
-Secrets use `${ENV_VAR}` expansion in `config.yaml`. The environment file at `/opt/serverstat/env` is loaded by systemd via `EnvironmentFile=` — values persist across reboots. The file is created with `chmod 600` (root-only readable).
+Secrets use `${ENV_VAR}` expansion in `config.yaml`. The environment file at `/opt/serverstat/env` is loaded by systemd via `EnvironmentFile=`, so values persist across reboots. The file is created with `chmod 600` (root-only readable).
 
 Dashboard is at `http://localhost:8080` (localhost only by default).
 
@@ -147,7 +147,7 @@ Removes the binary, config, and service files from the system.
 
 The config file lives at `/opt/serverstat/config.yaml` after install. A reference copy is in `config.yaml` at the root of this repo.
 
-Sensitive values use `${ENV_VAR}` expansion — never hardcode secrets in `config.yaml`:
+Sensitive values use `${ENV_VAR}` expansion. Never hardcode secrets in `config.yaml`:
 
 ```yaml
 mariadb:
@@ -191,27 +191,27 @@ Produces `serverstat-VERSION-linux-ARCH.tar.gz` containing the binary, scripts, 
 | Binary size | ~8 MB (stripped, static, no CGO) |
 | RSS at runtime (typical) | ~13 MB steady, ~16 MB peak |
 | GOMEMLIMIT (soft GC ceiling) | 64 MiB |
-| CPU | Negligible — checks run every 30 s |
+| CPU | Negligible (checks run every 30 s) |
 
-Numbers above are `VmRSS` / `VmHWM` from `/proc/PID/status` on a production Debian VM running nginx + WordPress + MariaDB + PHP-FPM.
+Numbers above are `VmRSS` and `VmHWM` from `/proc/PID/status` on a production Debian VM running nginx, WordPress, MariaDB, and PHP-FPM.
 
-A "soft GC ceiling" of 64 MiB does **not** mean asmt reserves 64 MiB. The Go runtime uses it as a hint to garbage-collect more aggressively as the heap approaches that number. Idle RSS stays around 13 MB. The headroom only matters during a crisis — see the "memory ceiling lesson" in [LEARNINGS.md](LEARNINGS.md).
+A "soft GC ceiling" of 64 MiB does **not** mean ASMT reserves 64 MiB. The Go runtime uses it as a hint to garbage-collect more aggressively as the heap approaches that number. Idle RSS stays around 13 MB. The headroom only matters during a crisis (see the "memory ceiling lesson" in [LEARNINGS.md](LEARNINGS.md)).
 
-> **Note on `systemctl status serverstat`.** systemd may report a much larger number (e.g. `Memory: 65M`). That is the service's *cgroup* memory, which includes **kernel pagecache** for the log files asmt tails — it is reclaimable on demand and is not "used by" the process in any meaningful sense. The process-level RSS is what the table above quotes, and it is what the `ps`, `top`, and `/proc/PID/status` numbers agree on.
+> **Note on `systemctl status serverstat`.** systemd may report a much larger number (e.g. `Memory: 65M`). That is the service's *cgroup* memory, which includes **kernel pagecache** for the log files ASMT tails. That memory is reclaimable on demand and is not "used by" the process in any meaningful sense. The process-level RSS is what the table above quotes, and it is what the `ps`, `top`, and `/proc/PID/status` numbers agree on.
 
 ---
 
 ## Project layout
 
 ```
-*.go              — All source (flat package main, ~3100 lines)
-lang/             — Translation YAML files (en, ko)
-web/              — Dashboard HTML (embedded at build time)
+*.go              All source (flat package main, ~3500 lines)
+lang/             Translation YAML files (en, ko)
+web/              Dashboard HTML (embedded at build time)
 scripts/
-  get.sh          — One-liner: detects arch, downloads latest release, installs
-  install.sh      — Installs from a local binary (used by get.sh and make install)
-  uninstall.sh    — Removes binary, config, and service files
-config.yaml       — Reference configuration
+  get.sh          One-liner: detects arch, downloads latest release, installs
+  install.sh      Installs from a local binary (used by get.sh and make install)
+  uninstall.sh    Removes binary, config, and service files
+config.yaml       Reference configuration
 Makefile
 ```
 
@@ -223,10 +223,10 @@ Found a vulnerability? Please **do not** open a public issue. See [SECURITY.md](
 
 ## Contributing
 
-Pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening one — it covers the coding conventions, the test/lint commands CI runs, and the design principles asmt holds itself to.
+Pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening one. It covers the coding conventions, the test/lint commands CI runs, and the design principles ASMT holds itself to.
 
 ## License
 
 [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0)
 
-You are free to use, modify, and distribute this software, but any modified version — including use over a network — must also be released under AGPL-3.0 with its source code made available. It cannot be used in closed-source or proprietary products without a separate commercial agreement.
+You are free to use, modify, and distribute this software, but any modified version (including use over a network) must also be released under AGPL-3.0 with its source code made available. It cannot be used in closed-source or proprietary products without a separate commercial agreement.

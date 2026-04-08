@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# asmt — automated installer
+# ASMT: automated installer
 #
 # Downloads the latest release for your architecture, installs the binary,
 # registers a systemd/OpenRC service, and generates a config file.
@@ -83,7 +83,7 @@ download "${URL}" "${TMPDIR}/${ARCHIVE}"
 # Supply-chain defense: verify the downloaded archive against the SHA-256
 # checksum file published with the release. If the checksum file is missing
 # (older releases) or doesn't match, we abort the install. HTTPS alone is
-# not sufficient — this catches tampered release artifacts, a compromised
+# not sufficient. This catches tampered release artifacts, a compromised
 # GitHub release, or a local proxy doing nasty things.
 info "Verifying checksum..."
 if download "${CHECKSUM_URL}" "${TMPDIR}/${ARCHIVE}.sha256" 2>/dev/null; then

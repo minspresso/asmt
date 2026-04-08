@@ -89,7 +89,7 @@ func (t *Translations) T(key string, args ...any) string {
 
 // Section returns all keys under a given prefix as a flat map.
 // Useful for sending a section of translations to the frontend.
-// Example: Section("dashboard") returns {"title": "asmt", ...}
+// Example: Section("dashboard") returns {"title": "ASMT", ...}
 func (t *Translations) Section(prefix string) map[string]string {
 	result := make(map[string]string)
 	pfx := prefix + "."

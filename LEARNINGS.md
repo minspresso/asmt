@@ -86,18 +86,28 @@ else is failing.** That demands a different mindset.
 second is generating **43 million entries per day**. No naive list can hold
 that. We needed something smarter.
 
-### The aggregation insight (a receipt analogy)
+### The aggregation insight (a "keeping count" analogy)
 
-Imagine a busy bakery selling 500 identical loaves between 9:00 and 9:15.
-Two ways to record it:
+Imagine you run a library help desk. All afternoon, people keep walking up
+and asking the same question: *"Where's the bathroom?"* You have two ways
+to write it down:
 
-- **Print 500 receipts.** End of day: 200,000 slips. You need a warehouse.
-- **Print one receipt** that says "500 × bread, 9:00-9:15." Same information,
-  one piece of paper. You lose the per-customer breakdown, but that's not
-  what anyone needs to know.
+- **Make a new note for each person.** Name, time, exact wording. By
+  closing you have 200 sticky notes piled on the desk.
+- **Keep one running count on a whiteboard.** "Bathroom question, 1pm to
+  5pm: 47 so far." One line, updated each time. You lose the per-person
+  detail, but nobody needed it anyway.
 
-ASMT uses the second approach. **One entry per (15-minute window × error
-type),** with a counter. The result:
+The running count tells you everything that actually matters: the question
+is being asked constantly, and the sign is in the wrong place. Whether
+visitor #23 asked at 2:43pm or 2:44pm changes nothing. The fix is the
+same either way: move the sign.
+
+ASMT does the running count. **One entry per (15-minute window, error
+type),** with a number next to it. When the same "404 /missing.html" line
+shows up 10,000 times in an hour, ASMT keeps one row that says so, instead
+of ten thousand rows that say the same thing ten thousand times. The
+result:
 
 | Server load | Raw events/day | Stored entries | Memory |
 |---|---|---|---|

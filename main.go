@@ -27,7 +27,7 @@ func main() {
 	// trigger, not an allocation reservation — a generous ceiling costs zero
 	// RSS at idle and gives the runtime headroom on the worst day, when
 	// buffers fill, the syncer is running, and the tail goroutines are busy.
-	// Realistic peak under load is ~14 MB; 64 MiB gives ~4× margin.
+	// Measured peak on a production VM is ~16 MB; 64 MiB gives ~4× margin.
 	// See LEARNINGS.md → "The memory ceiling lesson" for the full story.
 	if os.Getenv("GOMEMLIMIT") == "" {
 		debug.SetMemoryLimit(64 * 1024 * 1024)

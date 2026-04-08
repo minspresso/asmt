@@ -4,7 +4,7 @@
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/minspresso/asmt)](https://goreportcard.com/report/github.com/minspresso/asmt)
 
-A lightweight Linux server monitoring tool built in Go. Single static binary (~9 MB), zero runtime dependencies, ~11 MB RSS at runtime. Auto-detects services and works across every major Linux distribution.
+A lightweight Linux server monitoring tool built in Go. Single static binary (~8 MB), zero runtime dependencies, ~13 MB RSS at runtime. Auto-detects services and works across every major Linux distribution.
 
 > **Why another one?** asmt is designed to be a *smart lens on top of the OS journal*, not a replacement for it. It earns its existence by making existing truth easier to see — and it does so in roughly **one tenth the memory** of a typical agent. See [LEARNINGS.md](LEARNINGS.md) for the design story.
 
@@ -188,12 +188,16 @@ Produces `serverstat-VERSION-linux-ARCH.tar.gz` containing the binary, scripts, 
 
 | Metric | Value |
 |--------|-------|
-| Binary size | ~9 MB (stripped, static, no CGO) |
-| RSS at runtime (typical) | ~9 MB steady, ~14 MB peak |
+| Binary size | ~8 MB (stripped, static, no CGO) |
+| RSS at runtime (typical) | ~13 MB steady, ~16 MB peak |
 | GOMEMLIMIT (soft GC ceiling) | 64 MiB |
 | CPU | Negligible — checks run every 30 s |
 
-A "soft GC ceiling" of 64 MiB does **not** mean asmt reserves 64 MiB. The Go runtime uses it as a hint to garbage-collect more aggressively as the heap approaches that number. Idle RSS stays around 9 MB. The headroom only matters during a crisis — see the "memory ceiling lesson" in [LEARNINGS.md](LEARNINGS.md).
+Numbers above are `VmRSS` / `VmHWM` from `/proc/PID/status` on a production Debian VM running nginx + WordPress + MariaDB + PHP-FPM.
+
+A "soft GC ceiling" of 64 MiB does **not** mean asmt reserves 64 MiB. The Go runtime uses it as a hint to garbage-collect more aggressively as the heap approaches that number. Idle RSS stays around 13 MB. The headroom only matters during a crisis — see the "memory ceiling lesson" in [LEARNINGS.md](LEARNINGS.md).
+
+> **Note on `systemctl status serverstat`.** systemd may report a much larger number (e.g. `Memory: 65M`). That is the service's *cgroup* memory, which includes **kernel pagecache** for the log files asmt tails — it is reclaimable on demand and is not "used by" the process in any meaningful sense. The process-level RSS is what the table above quotes, and it is what the `ps`, `top`, and `/proc/PID/status` numbers agree on.
 
 ---
 

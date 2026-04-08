@@ -132,7 +132,8 @@ func (mb *MetricsBuffer) saveToday(points []MetricPoint) {
 	if mb.store == nil || len(points) == 0 {
 		return
 	}
-	// 0750 dir, 0640 file, same rationale as HistoryStore.Save.
+	// 0750 dir, 0600 file, same rationale as HistoryStore.Save: data files
+	// should be readable only by the serverstat user.
 	if err := os.MkdirAll(mb.store.dir, 0750); err != nil {
 		return
 	}
@@ -147,10 +148,13 @@ func (mb *MetricsBuffer) saveToday(points []MetricPoint) {
 	if err != nil {
 		return
 	}
-	if err := os.WriteFile(tmp, data, 0640); err != nil {
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return
 	}
-	os.Rename(tmp, path)
+	// Atomic publish. If rename fails, the next saveToday tick will retry
+	// with fresh data; we deliberately stay consistent with the rest of
+	// this fire-and-forget save path that swallows errors silently.
+	_ = os.Rename(tmp, path)
 }
 
 // load reads the last 7 days of metric files into the buffer on startup.

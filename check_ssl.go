@@ -59,8 +59,11 @@ func (c *SSLChecker) checkDomain(ctx context.Context, host string) CheckResult {
 	}
 	// TLS handshake. Setting ServerName enables SNI AND triggers Go's
 	// built-in hostname verification against the certificate, which is
-	// exactly what we want for a certificate-expiry monitor.
-	tlsConn := tls.Client(rawConn, &tls.Config{ServerName: host})
+	// exactly what we want for a certificate-expiry monitor. MinVersion
+	// is set to TLS 1.2 because the dashboard's purpose is to monitor
+	// real-world public certificates, which (post-2020) all support
+	// TLS 1.2 or higher.
+	tlsConn := tls.Client(rawConn, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		rawConn.Close()
 		return CheckResult{

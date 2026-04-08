@@ -17,6 +17,21 @@ linters:
     - typecheck       # Go type checker
 
 linters-settings:
+  errcheck:
+    # HTTP ResponseWriter.Write and json.Encoder.Encode return errors only
+    # when the client has already disconnected. Standard Go HTTP idiom is
+    # not to check them, because there is nothing useful to do: we cannot
+    # write a different response, the client is already gone, and logging
+    # at WARN on every disconnect is noise. Same reasoning applies to
+    # net.Conn.SetDeadline (a bad deadline turns into a Read/Write error
+    # on the next call) and httpServer.Shutdown (we are exiting anyway).
+    exclude-functions:
+      - (net/http.ResponseWriter).Write
+      - (*encoding/json.Encoder).Encode
+      - (net.Conn).SetDeadline
+      - (net.Conn).SetReadDeadline
+      - (net.Conn).SetWriteDeadline
+      - (*net/http.Server).Shutdown
   gosec:
     excludes:
       # G104 (errors unhandled) is handled by errcheck with better context.
@@ -27,6 +42,13 @@ linters-settings:
       # G304 (file inclusion via variable): we read from operator-controlled
       # config paths; audited manually.
       - G304
+      # G115 (integer overflow conversion): the platform-dependent stat
+      # syscalls return uint64 and we cast to int for percentage math
+      # where overflow is impossible (values are always small percentages
+      # or byte counts well within int range). Marked at site with
+      # //#nosec G115 comments where intentional. Bulk-excluded here so
+      # we do not have to add a comment to every line of arithmetic.
+      - G115
 
 issues:
   exclude-rules:
@@ -35,5 +57,9 @@ issues:
       linters:
         - gosec
     - path: nginx_domains\.go
+      linters:
+        - gosec
+    # Test files are allowed to use unsafe patterns (controlled inputs).
+    - path: _test\.go
       linters:
         - gosec

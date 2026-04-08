@@ -727,10 +727,13 @@ func (lw *LogWatcher) saveLogs() {
 	today := todayStart.Format("2006-01-02")
 	path := filepath.Join(lw.store.dir, "logs-"+today+".json")
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0640); err != nil {
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return
 	}
-	os.Rename(tmp, path)
+	// Atomic publish. If rename fails, the next saveLogs tick (or the
+	// shutdown flush in main.go) will try again. We stay consistent with
+	// the rest of this fire-and-forget save path.
+	_ = os.Rename(tmp, path)
 }
 
 // loadLogs reads up to logRetentionDays of persisted log entries on startup.

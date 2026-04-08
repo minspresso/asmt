@@ -45,8 +45,9 @@ Open `http://localhost:8080` for the dashboard.
 
 ## Running the checks CI runs
 
-Every PR runs the following on `ubuntu-latest` with Go 1.22. Run them
-locally before pushing:
+Every PR runs the following on `ubuntu-latest` with the latest stable
+Go (`go-version: "stable"` in `actions/setup-go`). Run them locally
+before pushing:
 
 ```bash
 go mod verify
@@ -55,11 +56,19 @@ go build -race ./...
 go vet ./...
 go test -race -short ./...
 golangci-lint run --timeout=5m
-govulncheck ./...
+govulncheck ./...     # advisory in CI, gating in the nightly job
 ```
 
-The lint config is in `.golangci.yml`. The CI workflow is
-`.github/workflows/ci.yml`.
+`build`, `vet`, `test`, and `golangci-lint` are **hard gates**: a
+failure blocks merge. `govulncheck` is **advisory in the per-push
+workflow** (`continue-on-error: true`) because it depends on a live
+vulnerability database and a brand-new stdlib CVE can flag the build
+even when no human touched the repo. The same check runs nightly in
+`.github/workflows/vulncheck.yml` as a hard gate so the maintainer
+gets notified by email when a real bump is needed.
+
+The lint config is in `.golangci.yml`. The CI workflows are
+`.github/workflows/ci.yml` and `.github/workflows/vulncheck.yml`.
 
 ## Coding conventions
 

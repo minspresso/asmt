@@ -37,7 +37,7 @@ ASMT runs as a background service and continuously checks the health of your ser
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /` | Web dashboard (auto-refreshes every 5 s) |
+| `GET /` | Web dashboard (status refreshes every 5 s; logs refresh immediately on status change and every 15 min otherwise) |
 | `GET /api/status` | Full JSON status of all components |
 | `GET /api/logs` | Recent log warnings with mitigation advice |
 | `GET /healthz` | Load balancer health check (`200 OK` or `503`) |

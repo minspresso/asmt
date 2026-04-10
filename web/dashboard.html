@@ -614,7 +614,8 @@ function renderHistoryBar(checks, history) {
       label += '\n\nSource: periodic checks. Click to see investigate commands.';
     }
     const clickable = (statusClass === 'warn' || statusClass === 'critical') ? ' hday-click' : '';
-    return `<div class="history-day hday-${statusClass}${clickable}" title="${escapeHtml(label)}" data-date="${escapeHtml(d.date)}"></div>`;
+    const components = [...new Set([...det.critical, ...det.warn])].join(',');
+    return `<div class="history-day hday-${statusClass}${clickable}" title="${escapeHtml(label)}" data-date="${escapeHtml(d.date)}" data-components="${escapeHtml(components)}"></div>`;
   }).join('');
 
   return `<div class="history-bar">
@@ -623,12 +624,14 @@ function renderHistoryBar(checks, history) {
   </div>`;
 }
 
-// Jump to the last log bucket on the given UTC date (YYYY-MM-DD).
+// Jump to the best log bucket on the given UTC date (YYYY-MM-DD).
+// When components are provided (from clicking a specific card's history bar),
+// prefer a bucket that contains entries matching those components.
 // The background sync has already pulled authoritative data into the
 // buffer, so if there's nothing to jump to, there really is nothing
 // for that day. We just smoothly scroll to the logs section in that case.
-function jumpToLogsForDay(date) {
-  const target = findBucketForDay(date);
+function jumpToLogsForDay(date, components) {
+  const target = findBucketForDay(date, components || []);
   if (target) {
     scrollToBucket(target.id);
     return;
@@ -642,16 +645,23 @@ function jumpToLogsForDay(date) {
   }
 }
 
-// Return the LAST (newest) log-bucket element for the given UTC date,
-// or null if none exists. Used for scroll targeting.
-function findBucketForDay(date) {
+// Return the best log-bucket element for the given UTC date.
+// When components are provided, prefer the FIRST (newest) bucket that
+// contains a chip mentioning one of those components. Falls back to the
+// FIRST bucket for this date if no component match is found.
+function findBucketForDay(date, components) {
   const prefix = 'logs-' + date.replace(/-/g, '') + '-';
   const buckets = document.querySelectorAll('.log-bucket');
-  let target = null;
+  let firstForDay = null;
   for (const b of buckets) {
-    if (b.id.startsWith(prefix)) target = b;
+    if (!b.id.startsWith(prefix)) continue;
+    if (!firstForDay) firstForDay = b;
+    if (components.length > 0) {
+      const chips = b.querySelector('.log-bucket-chips');
+      if (chips && components.some(c => chips.textContent.includes(c))) return b;
+    }
   }
-  return target;
+  return firstForDay;
 }
 
 // Trigger a manual sync. Pulls from authoritative sources (systemd journal)
@@ -952,6 +962,8 @@ async function fetchLogs() {
   }
 }
 
+let prevOverallStatus = 'ok';
+
 async function fetchStatus() {
   try {
     const resp = await fetch('/api/status');
@@ -963,6 +975,13 @@ async function fetchStatus() {
     const overall = document.getElementById('overall');
     overall.textContent = statusLabel(data.overall);
     overall.className = 'overall-badge status-' + safeStatus(data.overall);
+
+    // Refresh logs when status worsens (ok -> warn/critical)
+    const cur = safeStatus(data.overall);
+    if (cur !== 'ok' && prevOverallStatus === 'ok') {
+      fetchLogs();
+    }
+    prevOverallStatus = cur;
 
     document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
 
@@ -1467,7 +1486,8 @@ document.addEventListener('click', e => {
   // History day clicks → jump to that day's logs
   const histDay = e.target.closest('.history-day.hday-click');
   if (histDay && histDay.dataset.date) {
-    jumpToLogsForDay(histDay.dataset.date);
+    const components = histDay.dataset.components ? histDay.dataset.components.split(',') : [];
+    jumpToLogsForDay(histDay.dataset.date, components);
   }
 });
 

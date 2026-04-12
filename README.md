@@ -186,10 +186,11 @@ To enable MariaDB monitoring:
 ```sql
 CREATE USER 'monitor'@'127.0.0.1' IDENTIFIED BY 'a-strong-password';
 GRANT PROCESS ON *.* TO 'monitor'@'127.0.0.1';
+GRANT SELECT ON mysql.* TO 'monitor'@'127.0.0.1';
 FLUSH PRIVILEGES;
 ```
 
-`PROCESS` lets ASMT read thread count via `SHOW STATUS`. No table access is needed.
+`PROCESS` lets ASMT read thread count via `SHOW STATUS`. `SELECT ON mysql.*` is required because the DSN connects to the `mysql` database by default.
 
 2. Set the DSN in the environment file:
 

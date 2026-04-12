@@ -175,6 +175,39 @@ This file is loaded by systemd on every service start and persists across reboot
 
 Set language to `"en"` (English, default) or `"ko"` (Korean).
 
+### MariaDB monitoring setup
+
+ASMT can monitor MariaDB connection health, query ability, and active thread count. If `MARIADB_DSN` is not set (or the first connection fails), ASMT shows "not configured" on the dashboard and stops checking. It will not retry until you restart the service.
+
+To enable MariaDB monitoring:
+
+1. Create a read-only monitor user in MariaDB:
+
+```sql
+CREATE USER 'monitor'@'127.0.0.1' IDENTIFIED BY 'a-strong-password';
+GRANT PROCESS ON *.* TO 'monitor'@'127.0.0.1';
+FLUSH PRIVILEGES;
+```
+
+`PROCESS` lets ASMT read thread count via `SHOW STATUS`. No table access is needed.
+
+2. Set the DSN in the environment file:
+
+```bash
+# /opt/serverstat/env
+MARIADB_DSN=monitor:a-strong-password@tcp(127.0.0.1:3306)/mysql
+```
+
+3. Restart the service:
+
+```bash
+sudo systemctl restart serverstat
+```
+
+The dashboard should now show MariaDB as green. If the DSN is wrong, the dashboard shows the "not configured" message with next steps.
+
+To disable MariaDB monitoring entirely, set `mariadb.enabled: false` in `config.yaml`.
+
 ---
 
 ## Build a distributable archive

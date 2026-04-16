@@ -22,12 +22,17 @@ type HistoryDay struct {
 // critical then recovers within this window, today's history is reset to ok.
 const migrationThreshold = 10 * time.Minute
 
+type pendingAlert struct {
+	result     CheckResult
+	prevStatus Status
+}
+
 type Scheduler struct {
 	mu             sync.RWMutex
 	checkers       []Checker
 	results        map[string][]CheckResult
 	previousStatus map[string]Status
-	criticalSince  map[string]time.Time // when a component first went critical today
+	criticalSince  map[string]time.Time    // when a component first went critical today
 	history        map[string][]HistoryDay // component -> up to 7 days, oldest first
 	historyStore   *HistoryStore
 	metrics        *MetricsBuffer
@@ -217,11 +222,6 @@ func (s *Scheduler) runAll(ctx context.Context) {
 		close(ch)
 	}()
 
-	// Collect alerts to send OUTSIDE the lock to avoid blocking reads
-	type pendingAlert struct {
-		result     CheckResult
-		prevStatus Status
-	}
 	var alerts []pendingAlert
 	// Collect warn/critical results to record into the log buffer outside the lock.
 	var logRecords []CheckResult
@@ -235,38 +235,8 @@ func (s *Scheduler) runAll(ctx context.Context) {
 			if r.Status == StatusWarn || r.Status == StatusCritical {
 				logRecords = append(logRecords, r)
 			}
-
-			// Track when a component first goes critical (for migration detection).
-			if r.Status == StatusCritical {
-				if _, alreadyTracked := s.criticalSince[r.Component]; !alreadyTracked {
-					s.criticalSince[r.Component] = time.Now()
-				}
-			}
-
-			prevStatus, exists := s.previousStatus[r.Component]
-			if !exists {
-				s.previousStatus[r.Component] = r.Status
-				if r.Status == StatusCritical || r.Status == StatusWarn {
-					alerts = append(alerts, pendingAlert{r, StatusUnknown})
-				}
-				continue
-			}
-
-			if r.Status != prevStatus {
-				// If recovering from critical within the migration threshold,
-				// downgrade today's history to ok (intentional migration/config change).
-				if prevStatus == StatusCritical && r.Status == StatusOK {
-					if since, ok := s.criticalSince[r.Component]; ok {
-						if time.Since(since) <= migrationThreshold {
-							s.downgradeHistory(r.Component)
-						}
-					}
-				}
-				if r.Status != StatusCritical {
-					delete(s.criticalSince, r.Component)
-				}
-				alerts = append(alerts, pendingAlert{r, prevStatus})
-				s.previousStatus[r.Component] = r.Status
+			if a, ok := s.processResult(r); ok {
+				alerts = append(alerts, a)
 			}
 		}
 		s.mu.Unlock()
@@ -303,6 +273,46 @@ func (s *Scheduler) runAll(ctx context.Context) {
 	if pt, ok := extractMetricPoint(memResults); ok {
 		s.metrics.Push(pt)
 	}
+}
+
+// processResult evaluates a single check result against previous state and
+// returns a pending alert if a status transition occurred. Must be called
+// with s.mu held.
+func (s *Scheduler) processResult(r CheckResult) (pendingAlert, bool) {
+	// Track when a component first goes critical (for migration detection).
+	if r.Status == StatusCritical {
+		if _, alreadyTracked := s.criticalSince[r.Component]; !alreadyTracked {
+			s.criticalSince[r.Component] = time.Now()
+		}
+	}
+
+	prevStatus, exists := s.previousStatus[r.Component]
+	if !exists {
+		s.previousStatus[r.Component] = r.Status
+		if r.Status == StatusCritical || r.Status == StatusWarn {
+			return pendingAlert{r, StatusUnknown}, true
+		}
+		return pendingAlert{}, false
+	}
+
+	if r.Status == prevStatus {
+		return pendingAlert{}, false
+	}
+
+	// If recovering from critical within the migration threshold,
+	// downgrade today's history to ok (intentional migration/config change).
+	if prevStatus == StatusCritical && r.Status == StatusOK {
+		if since, ok := s.criticalSince[r.Component]; ok {
+			if time.Since(since) <= migrationThreshold {
+				s.downgradeHistory(r.Component)
+			}
+		}
+	}
+	if r.Status != StatusCritical {
+		delete(s.criticalSince, r.Component)
+	}
+	s.previousStatus[r.Component] = r.Status
+	return pendingAlert{r, prevStatus}, true
 }
 
 // extractMetricPoint pulls mem% and load_1m out of Linux checker results.

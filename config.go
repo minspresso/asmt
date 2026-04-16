@@ -14,13 +14,13 @@ import (
 )
 
 type Config struct {
-	Server        ServerConfig        `yaml:"server"`
-	Language      string              `yaml:"language"`
-	CheckInterval Duration            `yaml:"check_interval"`
-	Checks        ChecksConfig        `yaml:"checks"`
-	Logs          LogsConfig          `yaml:"logs"`
-	Healthz       HealthzConfig       `yaml:"healthz"`
-	Alerts        AlertsConfig        `yaml:"alerts"`
+	Server        ServerConfig  `yaml:"server"`
+	Language      string        `yaml:"language"`
+	CheckInterval Duration      `yaml:"check_interval"`
+	Checks        ChecksConfig  `yaml:"checks"`
+	Logs          LogsConfig    `yaml:"logs"`
+	Healthz       HealthzConfig `yaml:"healthz"`
+	Alerts        AlertsConfig  `yaml:"alerts"`
 }
 
 type LogsConfig struct {
@@ -59,7 +59,7 @@ type SSLConfig struct {
 
 type HTTPServerCheckConfig struct {
 	Enabled bool   `yaml:"enabled"`
-	Type    string `yaml:"type"`    // "nginx", "apache", or "auto" (default)
+	Type    string `yaml:"type"`     // "nginx", "apache", or "auto" (default)
 	PIDFile string `yaml:"pid_file"` // override auto-detected PID file
 }
 
@@ -116,14 +116,14 @@ type PostgreSQLCheckConfig struct {
 // Multiple entries are supported under checks.http_endpoints.
 type HTTPEndpointConfig struct {
 	Enabled       bool              `yaml:"enabled"`
-	Name          string            `yaml:"name"`           // unique name; used as component key
+	Name          string            `yaml:"name"` // unique name; used as component key
 	URL           string            `yaml:"url"`
-	Method        string            `yaml:"method"`         // GET by default
+	Method        string            `yaml:"method"` // GET by default
 	Headers       map[string]string `yaml:"headers"`
-	ExpectStatus  []int             `yaml:"expect_status"`  // default [200]
-	ExpectBody    string            `yaml:"expect_body"`    // optional substring check
+	ExpectStatus  []int             `yaml:"expect_status"` // default [200]
+	ExpectBody    string            `yaml:"expect_body"`   // optional substring check
 	TLSSkipVerify bool              `yaml:"tls_skip_verify"`
-	Timeout       Duration          `yaml:"timeout"`        // default 10s
+	Timeout       Duration          `yaml:"timeout"` // default 10s
 }
 
 type HealthzConfig struct {

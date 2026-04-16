@@ -52,135 +52,8 @@ func main() {
 	distro := DetectDistro()
 	logger.Info("detected environment", "distro", distro.String())
 
-	// Build checkers
-	var checkers []Checker
-	var mariadbChecker *MariaDBChecker
-	var postgresChecker *PostgreSQLChecker
-
-	if cfg.Checks.LoadBalancer.Enabled {
-		checkers = append(checkers, NewLoadBalancerChecker(cfg.Checks.LoadBalancer.LBIP, tr))
-	}
-
-	if cfg.Checks.Linux.Enabled {
-		checkers = append(checkers, &LinuxChecker{
-			DiskWarn:     cfg.Checks.Linux.DiskWarn,
-			DiskCritical: cfg.Checks.Linux.DiskCritical,
-			MemWarn:      cfg.Checks.Linux.MemWarn,
-			MemCritical:  cfg.Checks.Linux.MemCritical,
-			tr:           tr,
-		})
-	}
-
-	if cfg.Checks.Firewall.Enabled {
-		checkers = append(checkers, &FirewallChecker{
-			Ports: cfg.Checks.Firewall.Ports,
-			tr:    tr,
-		})
-	}
-
-	if cfg.Checks.HTTPServer.Enabled {
-		httpType := cfg.Checks.HTTPServer.Type
-		if httpType == "" || httpType == "auto" {
-			httpType = DetectHTTPServer()
-			if httpType != "" {
-				logger.Info("auto-detected HTTP server", "type", httpType)
-			}
-		}
-		switch httpType {
-		case "nginx":
-			pidFile := cfg.Checks.HTTPServer.PIDFile
-			if pidFile == "" {
-				pidFile = FindNginxPID()
-			}
-			checkers = append(checkers, NewNginxChecker(pidFile, tr))
-		case "apache":
-			checkers = append(checkers, NewApacheChecker(cfg.Checks.HTTPServer.PIDFile, tr))
-		}
-	}
-
-	if cfg.Checks.PHPFPM.Enabled {
-		socket := cfg.Checks.PHPFPM.Socket
-		if socket == "" && cfg.Checks.PHPFPM.Port == 0 {
-			socket = FindPHPFPMSocket()
-		}
-		checkers = append(checkers, &PHPFPMChecker{
-			Socket: socket,
-			Port:   cfg.Checks.PHPFPM.Port,
-			tr:     tr,
-		})
-	}
-
-	if cfg.Checks.MariaDB.Enabled && cfg.Checks.MariaDB.DSN != "" {
-		mariadbChecker = NewMariaDBChecker(cfg.Checks.MariaDB.DSN, tr)
-		checkers = append(checkers, mariadbChecker)
-	}
-
-	if cfg.Checks.WordPress.Enabled {
-		checkers = append(checkers, NewWordPressChecker(
-			cfg.Checks.WordPress.URL,
-			cfg.Checks.WordPress.ExpectBody,
-			cfg.Checks.WordPress.TLSSkipVerify,
-			tr,
-		))
-	}
-
-	if cfg.Checks.Redis.Enabled {
-		checkers = append(checkers, NewRedisChecker(
-			cfg.Checks.Redis.Name,
-			cfg.Checks.Redis.Addr,
-			cfg.Checks.Redis.Password,
-			tr,
-		))
-	}
-
-	if cfg.Checks.PostgreSQL.Enabled && cfg.Checks.PostgreSQL.DSN != "" {
-		postgresChecker = NewPostgreSQLChecker(
-			cfg.Checks.PostgreSQL.Name,
-			cfg.Checks.PostgreSQL.DSN,
-			tr,
-		)
-		checkers = append(checkers, postgresChecker)
-	}
-
-	for _, ep := range cfg.Checks.HTTPEndpoints {
-		if ep.Enabled && ep.URL != "" && ep.Name != "" {
-			checkers = append(checkers, NewHTTPEndpointChecker(ep, tr))
-		}
-	}
-
-	if cfg.Checks.SSLCertificates.Enabled {
-		domains := sslDomains(cfg)
-		if len(domains) > 0 {
-			checkers = append(checkers, NewSSLChecker(
-				domains,
-				cfg.Checks.SSLCertificates.WarnDays,
-				cfg.Checks.SSLCertificates.CriticalDays,
-				tr,
-			))
-		}
-	}
-
-	// Build alerters
-	var alerters []Alerter
-	if cfg.Alerts.Log.Enabled {
-		alerters = append(alerters, &LogAlerter{Logger: logger, tr: tr})
-	}
-	if cfg.Alerts.Webhook.Enabled && cfg.Alerts.Webhook.URL != "" {
-		alerters = append(alerters, NewWebhookAlerter(cfg.Alerts.Webhook.URL, tr))
-	}
-	if cfg.Alerts.Email.Enabled {
-		alerters = append(alerters, &EmailAlerter{
-			Host:     cfg.Alerts.Email.SMTPHost,
-			Port:     cfg.Alerts.Email.SMTPPort,
-			From:     cfg.Alerts.Email.From,
-			To:       cfg.Alerts.Email.To,
-			Username: cfg.Alerts.Email.Username,
-			Password: cfg.Alerts.Email.Password,
-			tr:       tr,
-		})
-	}
-
-	alerter := NewMultiAlerter(alerters...)
+	checkers, mariadbChecker, postgresChecker := buildCheckers(cfg, tr, logger)
+	alerter := buildAlerter(cfg, tr, logger)
 
 	// Start scheduler
 	ctx, cancel := context.WithCancel(context.Background())
@@ -189,87 +62,11 @@ func main() {
 	historyStore := NewHistoryStore(*configPath)
 	scheduler := NewScheduler(checkers, cfg.CheckInterval.Duration, alerter, logger, tr, historyStore)
 
-	// Start log watcher
-	var logWatcher *LogWatcher
-	if cfg.Logs.Enabled {
-		var logFiles []LogFileConfig
-		if len(cfg.Logs.Files) > 0 {
-			for _, path := range cfg.Logs.Files {
-				source := guessLogSource(path)
-				logFiles = append(logFiles, LogFileConfig{Path: path, Source: source})
-			}
-		} else {
-			logFiles = DefaultLogFiles()
-		}
-		logWatcher = NewLogWatcher(logFiles, DefaultLogPatterns(), cfg.Logs.BufferSize, tr, historyStore)
-		// Wire log watcher into scheduler so check results (warn/critical)
-		// are recorded into the unified log timeline. Note: our check events
-		// are observations, not authoritative records. The OS / software logs
-		// (journalctl, syslog, nginx error.log, etc.) are the source of truth.
-		// When users need to verify or investigate, the dashboard points them
-		// there rather than relying on our own potentially-lossy buffer.
-		scheduler.SetLogWatcher(logWatcher)
-		go logWatcher.Start(ctx)
-		logger.Info("log watcher started", "files", len(logFiles), "buffer_size", cfg.Logs.BufferSize)
-	}
+	logWatcher, syncer := startLogSystem(ctx, cfg, tr, historyStore, scheduler, logger)
 
 	// Start scheduler AFTER wiring logWatcher so the very first check cycle
 	// can record any warn/critical results into the log buffer.
 	go scheduler.Start(ctx)
-
-	// Build a Syncer that pulls from the systemd journal and feeds our
-	// buffer. If journalctl isn't installed (e.g., Alpine), Syncer is
-	// disabled and the API handler returns 501.
-	var syncer *Syncer
-	if logWatcher != nil {
-		syncer = NewSyncer(logWatcher.buffer, logger)
-		if syncer.Enabled() {
-			logger.Info("syncer ready (journalctl available)")
-			// Initial sync on startup: catches up any history the real-time
-			// tail goroutines missed while the process was down. Runs in a
-			// goroutine so HTTP server can start immediately.
-			go func() {
-				syncCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-				defer cancel()
-				res, err := syncer.Sync(syncCtx)
-				if err != nil {
-					logger.Warn("initial sync failed", "error", err)
-					return
-				}
-				logger.Info("initial sync complete",
-					"chunks", res.ChunksRun,
-					"lines_parsed", res.LinesParsed,
-					"events_added", res.EventsAdded,
-					"buffer_after", res.BufferAfter,
-					"duration", res.CompletedAt.Sub(res.StartedAt).String(),
-				)
-			}()
-			// Background auto-sync: every hour, catch up anything new.
-			go func() {
-				ticker := time.NewTicker(1 * time.Hour)
-				defer ticker.Stop()
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case <-ticker.C:
-						syncCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-						res, err := syncer.Sync(syncCtx)
-						cancel()
-						if err != nil {
-							logger.Warn("auto-sync failed", "error", err)
-							continue
-						}
-						logger.Debug("auto-sync complete",
-							"events_added", res.EventsAdded,
-							"buffer_after", res.BufferAfter)
-					}
-				}
-			}()
-		} else {
-			logger.Info("syncer disabled (journalctl not available)")
-		}
-	}
 
 	// Loud warning if the tool is configured to listen on a non-loopback
 	// address. ASMT has NO built-in authentication; operators who bind
@@ -415,5 +212,220 @@ func guessLogSource(path string) string {
 		return "mariadb"
 	default:
 		return "system"
+	}
+}
+
+// buildCheckers creates all enabled health checkers from config.
+func buildCheckers(cfg *Config, tr *Translations, logger *slog.Logger) ([]Checker, *MariaDBChecker, *PostgreSQLChecker) {
+	var checkers []Checker
+	var mariadbChecker *MariaDBChecker
+	var postgresChecker *PostgreSQLChecker
+
+	if cfg.Checks.LoadBalancer.Enabled {
+		checkers = append(checkers, NewLoadBalancerChecker(cfg.Checks.LoadBalancer.LBIP, tr))
+	}
+
+	if cfg.Checks.Linux.Enabled {
+		checkers = append(checkers, &LinuxChecker{
+			DiskWarn:     cfg.Checks.Linux.DiskWarn,
+			DiskCritical: cfg.Checks.Linux.DiskCritical,
+			MemWarn:      cfg.Checks.Linux.MemWarn,
+			MemCritical:  cfg.Checks.Linux.MemCritical,
+			tr:           tr,
+		})
+	}
+
+	if cfg.Checks.Firewall.Enabled {
+		checkers = append(checkers, &FirewallChecker{
+			Ports: cfg.Checks.Firewall.Ports,
+			tr:    tr,
+		})
+	}
+
+	if cfg.Checks.HTTPServer.Enabled {
+		checkers = appendHTTPServerChecker(checkers, cfg, tr, logger)
+	}
+
+	if cfg.Checks.PHPFPM.Enabled {
+		socket := cfg.Checks.PHPFPM.Socket
+		if socket == "" && cfg.Checks.PHPFPM.Port == 0 {
+			socket = FindPHPFPMSocket()
+		}
+		checkers = append(checkers, &PHPFPMChecker{
+			Socket: socket,
+			Port:   cfg.Checks.PHPFPM.Port,
+			tr:     tr,
+		})
+	}
+
+	if cfg.Checks.MariaDB.Enabled && cfg.Checks.MariaDB.DSN != "" {
+		mariadbChecker = NewMariaDBChecker(cfg.Checks.MariaDB.DSN, tr)
+		checkers = append(checkers, mariadbChecker)
+	}
+
+	if cfg.Checks.WordPress.Enabled {
+		checkers = append(checkers, NewWordPressChecker(
+			cfg.Checks.WordPress.URL,
+			cfg.Checks.WordPress.ExpectBody,
+			cfg.Checks.WordPress.TLSSkipVerify,
+			tr,
+		))
+	}
+
+	if cfg.Checks.Redis.Enabled {
+		checkers = append(checkers, NewRedisChecker(
+			cfg.Checks.Redis.Name,
+			cfg.Checks.Redis.Addr,
+			cfg.Checks.Redis.Password,
+			tr,
+		))
+	}
+
+	if cfg.Checks.PostgreSQL.Enabled && cfg.Checks.PostgreSQL.DSN != "" {
+		postgresChecker = NewPostgreSQLChecker(
+			cfg.Checks.PostgreSQL.Name,
+			cfg.Checks.PostgreSQL.DSN,
+			tr,
+		)
+		checkers = append(checkers, postgresChecker)
+	}
+
+	checkers = appendEndpointCheckers(checkers, cfg, tr)
+
+	return checkers, mariadbChecker, postgresChecker
+}
+
+func appendEndpointCheckers(checkers []Checker, cfg *Config, tr *Translations) []Checker {
+	for _, ep := range cfg.Checks.HTTPEndpoints {
+		if ep.Enabled && ep.URL != "" && ep.Name != "" {
+			checkers = append(checkers, NewHTTPEndpointChecker(ep, tr))
+		}
+	}
+
+	if cfg.Checks.SSLCertificates.Enabled {
+		domains := sslDomains(cfg)
+		if len(domains) > 0 {
+			checkers = append(checkers, NewSSLChecker(
+				domains,
+				cfg.Checks.SSLCertificates.WarnDays,
+				cfg.Checks.SSLCertificates.CriticalDays,
+				tr,
+			))
+		}
+	}
+	return checkers
+}
+
+func appendHTTPServerChecker(checkers []Checker, cfg *Config, tr *Translations, logger *slog.Logger) []Checker {
+	httpType := cfg.Checks.HTTPServer.Type
+	if httpType == "" || httpType == "auto" {
+		httpType = DetectHTTPServer()
+		if httpType != "" {
+			logger.Info("auto-detected HTTP server", "type", httpType)
+		}
+	}
+	switch httpType {
+	case "nginx":
+		pidFile := cfg.Checks.HTTPServer.PIDFile
+		if pidFile == "" {
+			pidFile = FindNginxPID()
+		}
+		checkers = append(checkers, NewNginxChecker(pidFile, tr))
+	case "apache":
+		checkers = append(checkers, NewApacheChecker(cfg.Checks.HTTPServer.PIDFile, tr))
+	}
+	return checkers
+}
+
+// buildAlerter creates the multi-alerter from config.
+func buildAlerter(cfg *Config, tr *Translations, logger *slog.Logger) *MultiAlerter {
+	var alerters []Alerter
+	if cfg.Alerts.Log.Enabled {
+		alerters = append(alerters, &LogAlerter{Logger: logger, tr: tr})
+	}
+	if cfg.Alerts.Webhook.Enabled && cfg.Alerts.Webhook.URL != "" {
+		alerters = append(alerters, NewWebhookAlerter(cfg.Alerts.Webhook.URL, tr))
+	}
+	if cfg.Alerts.Email.Enabled {
+		alerters = append(alerters, &EmailAlerter{
+			Host:     cfg.Alerts.Email.SMTPHost,
+			Port:     cfg.Alerts.Email.SMTPPort,
+			From:     cfg.Alerts.Email.From,
+			To:       cfg.Alerts.Email.To,
+			Username: cfg.Alerts.Email.Username,
+			Password: cfg.Alerts.Email.Password,
+			tr:       tr,
+		})
+	}
+	return NewMultiAlerter(alerters...)
+}
+
+// startLogSystem initializes the log watcher and syncer if logging is enabled.
+func startLogSystem(ctx context.Context, cfg *Config, tr *Translations, historyStore *HistoryStore, scheduler *Scheduler, logger *slog.Logger) (*LogWatcher, *Syncer) {
+	if !cfg.Logs.Enabled {
+		return nil, nil
+	}
+
+	var logFiles []LogFileConfig
+	if len(cfg.Logs.Files) > 0 {
+		for _, path := range cfg.Logs.Files {
+			logFiles = append(logFiles, LogFileConfig{Path: path, Source: guessLogSource(path)})
+		}
+	} else {
+		logFiles = DefaultLogFiles()
+	}
+	logWatcher := NewLogWatcher(logFiles, DefaultLogPatterns(), cfg.Logs.BufferSize, tr, historyStore)
+	scheduler.SetLogWatcher(logWatcher)
+	go logWatcher.Start(ctx)
+	logger.Info("log watcher started", "files", len(logFiles), "buffer_size", cfg.Logs.BufferSize)
+
+	syncer := NewSyncer(logWatcher.buffer, logger)
+	if !syncer.Enabled() {
+		logger.Info("syncer disabled (journalctl not available)")
+		return logWatcher, syncer
+	}
+
+	logger.Info("syncer ready (journalctl available)")
+	go runInitialSync(ctx, syncer, logger)
+	go runPeriodicSync(ctx, syncer, logger)
+	return logWatcher, syncer
+}
+
+func runInitialSync(ctx context.Context, syncer *Syncer, logger *slog.Logger) {
+	syncCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	res, err := syncer.Sync(syncCtx)
+	if err != nil {
+		logger.Warn("initial sync failed", "error", err)
+		return
+	}
+	logger.Info("initial sync complete",
+		"chunks", res.ChunksRun,
+		"lines_parsed", res.LinesParsed,
+		"events_added", res.EventsAdded,
+		"buffer_after", res.BufferAfter,
+		"duration", res.CompletedAt.Sub(res.StartedAt).String(),
+	)
+}
+
+func runPeriodicSync(ctx context.Context, syncer *Syncer, logger *slog.Logger) {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			syncCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			res, err := syncer.Sync(syncCtx)
+			cancel()
+			if err != nil {
+				logger.Warn("auto-sync failed", "error", err)
+				continue
+			}
+			logger.Debug("auto-sync complete",
+				"events_added", res.EventsAdded,
+				"buffer_after", res.BufferAfter)
+		}
 	}
 }

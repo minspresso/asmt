@@ -24,6 +24,7 @@ type PHPFPMChecker struct {
 //   - "php-fpm"                        (unversioned)
 //   - "php-fpm<digit>..." e.g. "php-fpm8.2", "php-fpm7.4"
 //   - "php<digit>.<digit>-fpm"         e.g. "php8.2-fpm" (Debian)
+//
 // Rejects noise like "php-fpm-monitor", "php-fpmXYZ", "fake-php-fpm".
 func isPHPFPMProcess(name string) bool {
 	if name == "php-fpm" {

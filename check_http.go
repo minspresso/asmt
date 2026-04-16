@@ -90,25 +90,7 @@ func (c *HTTPEndpointChecker) Check(ctx context.Context) []CheckResult {
 	}
 	defer resp.Body.Close()
 
-	// Determine expected status codes (default: 200)
-	expected := c.cfg.ExpectStatus
-	if len(expected) == 0 {
-		expected = []int{200}
-	}
-
-	statusMatch := false
-	for _, s := range expected {
-		if resp.StatusCode == s {
-			statusMatch = true
-			break
-		}
-	}
-
-	if !statusMatch {
-		sev := StatusCritical
-		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-			sev = StatusWarn
-		}
+	if sev, ok := c.checkStatusCode(resp.StatusCode); !ok {
 		return []CheckResult{{
 			Component: c.Name(),
 			Status:    sev,
@@ -144,4 +126,22 @@ func (c *HTTPEndpointChecker) Check(ctx context.Context) []CheckResult {
 		Message:   c.tr.T("checks.http_ok", resp.StatusCode),
 		CheckedAt: time.Now(),
 	}}
+}
+
+// checkStatusCode returns (severity, false) if the status code does not match
+// any expected code, or (_, true) if it matches.
+func (c *HTTPEndpointChecker) checkStatusCode(code int) (Status, bool) {
+	expected := c.cfg.ExpectStatus
+	if len(expected) == 0 {
+		expected = []int{200}
+	}
+	for _, s := range expected {
+		if code == s {
+			return StatusOK, true
+		}
+	}
+	if code >= 400 && code < 500 {
+		return StatusWarn, false
+	}
+	return StatusCritical, false
 }

@@ -39,6 +39,18 @@ func (d Distro) String() string {
 	}
 }
 
+// distroPatterns maps os-release substrings to distribution families.
+var distroPatterns = []struct {
+	distro   Distro
+	patterns []string
+}{
+	{DistroDebian, []string{"id=debian", "id=ubuntu", "id_like=debian", "id=linuxmint"}},
+	{DistroRHEL, []string{"id=rhel", "id=centos", "id=fedora", "id=rocky", "id=almalinux", "id_like=rhel", `id_like="rhel`}},
+	{DistroArch, []string{"id=arch", "id=manjaro", "id_like=arch"}},
+	{DistroAlpine, []string{"id=alpine"}},
+	{DistroSUSE, []string{"id=opensuse", "id=sles", "id_like=suse"}},
+}
+
 // DetectDistro determines the Linux distribution family.
 func DetectDistro() Distro {
 	data, err := os.ReadFile("/etc/os-release")
@@ -47,33 +59,14 @@ func DetectDistro() Distro {
 	}
 	content := strings.ToLower(string(data))
 
-	switch {
-	case strings.Contains(content, "id=debian") ||
-		strings.Contains(content, "id=ubuntu") ||
-		strings.Contains(content, "id_like=debian") ||
-		strings.Contains(content, "id=linuxmint"):
-		return DistroDebian
-	case strings.Contains(content, "id=rhel") ||
-		strings.Contains(content, "id=centos") ||
-		strings.Contains(content, "id=fedora") ||
-		strings.Contains(content, "id=rocky") ||
-		strings.Contains(content, "id=almalinux") ||
-		strings.Contains(content, "id_like=rhel") ||
-		strings.Contains(content, `id_like="rhel`):
-		return DistroRHEL
-	case strings.Contains(content, "id=arch") ||
-		strings.Contains(content, "id=manjaro") ||
-		strings.Contains(content, "id_like=arch"):
-		return DistroArch
-	case strings.Contains(content, "id=alpine"):
-		return DistroAlpine
-	case strings.Contains(content, "id=opensuse") ||
-		strings.Contains(content, "id=sles") ||
-		strings.Contains(content, "id_like=suse"):
-		return DistroSUSE
-	default:
-		return DistroUnknown
+	for _, dp := range distroPatterns {
+		for _, p := range dp.patterns {
+			if strings.Contains(content, p) {
+				return dp.distro
+			}
+		}
 	}
+	return DistroUnknown
 }
 
 // ServiceInfo describes an auto-detected service.
@@ -136,8 +129,8 @@ func ApacheConfigTestCmd() (string, []string) {
 // ApachePIDPaths returns candidate PID file paths across distros.
 func ApachePIDPaths() []string {
 	return []string{
-		"/run/apache2/apache2.pid",   // Debian/Ubuntu
-		"/run/httpd/httpd.pid",       // RHEL/CentOS
+		"/run/apache2/apache2.pid", // Debian/Ubuntu
+		"/run/httpd/httpd.pid",     // RHEL/CentOS
 		"/var/run/apache2/apache2.pid",
 		"/var/run/httpd/httpd.pid",
 		"/run/apache2.pid",
@@ -219,8 +212,8 @@ func DetectLogFiles() []LogFileConfig {
 
 		// System logs
 		{Path: "/var/log/syslog", Source: "system"},   // Debian/Ubuntu
-		{Path: "/var/log/messages", Source: "system"},  // RHEL/CentOS/SUSE
-		{Path: "/var/log/kern.log", Source: "system"},  // Debian kernel log
+		{Path: "/var/log/messages", Source: "system"}, // RHEL/CentOS/SUSE
+		{Path: "/var/log/kern.log", Source: "system"}, // Debian kernel log
 	}
 
 	// Also glob for versioned PHP-FPM logs (Debian: /var/log/phpX.Y-fpm.log)

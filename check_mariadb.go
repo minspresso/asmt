@@ -14,12 +14,11 @@ import (
 )
 
 type MariaDBChecker struct {
-	DSN      string
-	tr       *Translations
-	db       *sql.DB
-	once     sync.Once
-	initErr  error
-	disabled bool // set after first connection failure to stop retrying
+	DSN     string
+	tr      *Translations
+	db      *sql.DB
+	once    sync.Once
+	initErr error
 }
 
 // NewMariaDBChecker creates a checker with a persistent connection pool.
@@ -53,22 +52,11 @@ func (c *MariaDBChecker) Close() {
 }
 
 func (c *MariaDBChecker) Check(ctx context.Context) []CheckResult {
-	if c.disabled {
-		return []CheckResult{{
-			Component: "mariadb-connection",
-			Status:    StatusCritical,
-			Message:   c.tr.T("checks.mariadb_not_configured"),
-			CheckedAt: time.Now(),
-		}}
-	}
-
 	if err := c.initDB(); err != nil {
-		c.disabled = true
-		slog.Warn("MariaDB check disabled after connection pool error, will not retry", "error", err)
 		return []CheckResult{{
 			Component: "mariadb-connection",
 			Status:    StatusCritical,
-			Message:   c.tr.T("checks.mariadb_not_configured"),
+			Message:   c.tr.T("checks.mariadb_open_error", err.Error()),
 			CheckedAt: time.Now(),
 		}}
 	}
@@ -79,12 +67,11 @@ func (c *MariaDBChecker) Check(ctx context.Context) []CheckResult {
 	defer cancel()
 
 	if err := c.db.PingContext(pingCtx); err != nil {
-		c.disabled = true
-		slog.Warn("MariaDB check disabled after ping failure, will not retry", "error", err)
+		slog.Warn("MariaDB ping failed, will retry next cycle", "error", err)
 		return []CheckResult{{
 			Component: "mariadb-connection",
 			Status:    StatusCritical,
-			Message:   c.tr.T("checks.mariadb_not_configured"),
+			Message:   c.tr.T("checks.mariadb_ping_failed", err.Error()),
 			CheckedAt: time.Now(),
 		}}
 	}

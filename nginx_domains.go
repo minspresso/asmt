@@ -69,15 +69,15 @@ func nginxDomains() []string {
 	return parseNginxDomains(allData)
 }
 
+type serverBlock struct {
+	hasSSL      bool
+	serverNames []string
+}
+
 // parseNginxDomains extracts domains from nginx -T output.
 // It tracks server blocks (brace depth) and collects server_name values
 // from blocks that have a listen directive with 443 or ssl.
 func parseNginxDomains(data []byte) []string {
-	type serverBlock struct {
-		hasSSL      bool
-		serverNames []string
-	}
-
 	var blocks []serverBlock
 	var current *serverBlock
 	depth := 0
@@ -132,7 +132,15 @@ func parseNginxDomains(data []byte) []string {
 		}
 	}
 
-	// Deduplicate and filter
+	domains := collectSSLDomains(blocks)
+	if len(domains) > 0 {
+		slog.Info("auto-detected SSL domains from nginx", "domains", domains)
+	}
+	return domains
+}
+
+// collectSSLDomains deduplicates and filters valid domain names from SSL server blocks.
+func collectSSLDomains(blocks []serverBlock) []string {
 	seen := make(map[string]struct{})
 	var domains []string
 	for _, b := range blocks {
@@ -149,10 +157,6 @@ func parseNginxDomains(data []byte) []string {
 				domains = append(domains, name)
 			}
 		}
-	}
-
-	if len(domains) > 0 {
-		slog.Info("auto-detected SSL domains from nginx", "domains", domains)
 	}
 	return domains
 }

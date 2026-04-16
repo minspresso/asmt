@@ -84,7 +84,6 @@ checks:
   mariadb_query_failed: "query failed: %s"
   mariadb_query_ok: "query executed successfully"
   mariadb_threads: "%s active connections"
-  mariadb_not_configured: "not configured: set MARIADB_DSN in /opt/serverstat/env and restart"
 
   # Firewall
   firewall_port_unreachable: "port %d unreachable: %s"

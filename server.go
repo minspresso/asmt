@@ -61,15 +61,15 @@ type checkResultJSON struct {
 // step, no separate JS file). That means 'unsafe-inline' must be
 // allowed in script-src. We still lock down every other directive:
 //
-//   default-src 'self'                : block loads from any other origin
-//   script-src 'self' 'unsafe-inline' : our own inline scripts, no CDNs
-//   style-src 'self' 'unsafe-inline'  : our own inline styles, no external CSS
-//   img-src 'self' data:              : inline data URIs only (no tracking pixels)
-//   connect-src 'self'                : fetch/XHR only to our own origin
-//   object-src 'none'                 : block <object>, <embed>, Flash
-//   base-uri 'self'                   : prevent <base href> hijacks
-//   form-action 'none'                : no form submissions
-//   frame-ancestors 'none'            : redundant with X-Frame-Options
+//	default-src 'self'                : block loads from any other origin
+//	script-src 'self' 'unsafe-inline' : our own inline scripts, no CDNs
+//	style-src 'self' 'unsafe-inline'  : our own inline styles, no external CSS
+//	img-src 'self' data:              : inline data URIs only (no tracking pixels)
+//	connect-src 'self'                : fetch/XHR only to our own origin
+//	object-src 'none'                 : block <object>, <embed>, Flash
+//	base-uri 'self'                   : prevent <base href> hijacks
+//	form-action 'none'                : no form submissions
+//	frame-ancestors 'none'            : redundant with X-Frame-Options
 //
 // This policy would break if the dashboard ever tried to embed a
 // CDN-hosted library; that's intentional. Everything ships in the
@@ -324,10 +324,11 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 // POST /api/sync
 //
 // Response codes:
-//   200: sync completed (possibly with per-chunk errors in result.errors)
-//   409: a sync is already in progress
-//   501: journalctl not available on this system
-//   500: unexpected error starting the sync
+//
+//	200: sync completed (possibly with per-chunk errors in result.errors)
+//	409: a sync is already in progress
+//	501: journalctl not available on this system
+//	500: unexpected error starting the sync
 func (s *Server) handleSyncRun(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache, no-store")

@@ -223,4 +223,3 @@ func (c *LinuxChecker) checkLoadAvg() CheckResult {
 		CheckedAt: time.Now(),
 	}
 }
-

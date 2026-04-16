@@ -110,24 +110,46 @@ func (c *RedisChecker) Check(ctx context.Context) []CheckResult {
 	}}
 
 	// INFO: parse used_memory_human and connected_clients
+	mem, clients := readRedisInfo(conn, r)
+
+	if mem != "" {
+		results = append(results, CheckResult{
+			Component: c.comp("memory"),
+			Status:    StatusOK,
+			Message:   c.tr.T("checks.redis_memory", mem),
+			CheckedAt: time.Now(),
+		})
+	}
+	if clients != "" {
+		results = append(results, CheckResult{
+			Component: c.comp("clients"),
+			Status:    StatusOK,
+			Message:   c.tr.T("checks.redis_clients", clients),
+			CheckedAt: time.Now(),
+		})
+	}
+
+	return results
+}
+
+// readRedisInfo sends INFO to Redis and extracts used_memory_human and connected_clients.
+func readRedisInfo(conn net.Conn, r *bufio.Reader) (usedMemory, connectedClients string) {
 	fmt.Fprintf(conn, "*1\r\n$4\r\nINFO\r\n")
 	header, err := r.ReadString('\n')
 	if err != nil || !strings.HasPrefix(header, "$") {
-		return results
+		return "", ""
 	}
 
-	lenStr := strings.TrimSpace(strings.TrimPrefix(header, "$"))
-	byteCount, err := strconv.Atoi(lenStr)
+	byteCount, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(header, "$")))
 	if err != nil || byteCount <= 0 {
-		return results
+		return "", ""
 	}
 
 	infoBytes := make([]byte, byteCount)
 	if _, err := io.ReadFull(r, infoBytes); err != nil {
-		return results
+		return "", ""
 	}
 
-	var usedMemory, connectedClients string
 	for _, rawLine := range strings.Split(string(infoBytes), "\n") {
 		if k, v, ok := strings.Cut(strings.TrimSpace(rawLine), ":"); ok {
 			switch k {
@@ -138,23 +160,5 @@ func (c *RedisChecker) Check(ctx context.Context) []CheckResult {
 			}
 		}
 	}
-
-	if usedMemory != "" {
-		results = append(results, CheckResult{
-			Component: c.comp("memory"),
-			Status:    StatusOK,
-			Message:   c.tr.T("checks.redis_memory", usedMemory),
-			CheckedAt: time.Now(),
-		})
-	}
-	if connectedClients != "" {
-		results = append(results, CheckResult{
-			Component: c.comp("clients"),
-			Status:    StatusOK,
-			Message:   c.tr.T("checks.redis_clients", connectedClients),
-			CheckedAt: time.Now(),
-		})
-	}
-
-	return results
+	return usedMemory, connectedClients
 }

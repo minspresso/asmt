@@ -84,7 +84,6 @@ checks:
   mariadb_query_failed: "쿼리 실패: %s"
   mariadb_query_ok: "쿼리 실행 성공"
   mariadb_threads: "활성 연결 %s개"
-  mariadb_not_configured: "미설정: /opt/serverstat/env에 MARIADB_DSN을 설정하고 재시작하세요"
 
   # 방화벽
   firewall_port_unreachable: "포트 %d 접근 불가: %s"

@@ -865,8 +865,8 @@ function buildBucketBody(entries) {
   for (const e of entries) {
     const safeSev = safeSeverity(e.severity);
     const count = e.count || 1;
-    const firstTime = new Date(e.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const lastTime = e.last_seen ? new Date(e.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : firstTime;
+    const firstTime = new Date(e.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    const lastTime = e.last_seen ? new Date(e.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : firstTime;
     const timeRange = firstTime === lastTime ? firstTime : (firstTime + ' \u2192 ' + lastTime);
     const isCheck = e.source === 'check';
 
@@ -937,9 +937,9 @@ async function fetchLogs() {
       const endDate = new Date(group.date.getTime() + 15 * 60 * 1000);
       const timeDate = group.date.toLocaleDateString([], { month: 'short', day: 'numeric' });
       const timeLabel = timeDate + ' '
-                      + group.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      + group.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
                       + ' to '
-                      + endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      + endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
       const openClass = wasOpen.has(id) ? ' open' : '';
       html += `<div class="log-bucket${openClass}" id="${escapeHtml(id)}">`;
       html += `<div class="log-bucket-header" onclick="this.parentElement.classList.toggle('open')">`;
@@ -983,7 +983,7 @@ async function fetchStatus() {
     }
     prevOverallStatus = cur;
 
-    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString([], { hour12: false });
 
     const grid = document.getElementById('grid');
     let html = '';
@@ -1055,16 +1055,16 @@ function gFormatXLabel(ts, rangeS) {
   const d = new Date(ts * 1000);
   let local, utc;
   if (rangeS <= 3600) {
-    local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    utc   = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC' });
+    local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    utc   = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'UTC' });
   } else if (rangeS <= 86400) {
-    local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    utc   = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+    local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    utc   = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
   } else {
     local = d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
-            d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     utc   = d.toLocaleDateString([], { month: 'short', day: 'numeric', timeZone: 'UTC' }) + ' ' +
-            d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+            d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
   }
   return { local, utc: utc + ' UTC' };
 }
@@ -1086,8 +1086,8 @@ function gUpdateRangeLabel() {
   const pts = allMetricPoints.filter(p => p.t >= gViewStart && p.t <= gViewEnd);
   if (pts.length === 0) { rangeEl.textContent = ''; return; }
   rangeEl.textContent =
-    new Date(pts[0].t * 1000).toLocaleString() + ' \u2192 ' +
-    new Date(pts[pts.length - 1].t * 1000).toLocaleString() +
+    new Date(pts[0].t * 1000).toLocaleString([], { hour12: false }) + ' \u2192 ' +
+    new Date(pts[pts.length - 1].t * 1000).toLocaleString([], { hour12: false }) +
     ' (' + pts.length + ' readings)';
 }
 
@@ -1310,7 +1310,7 @@ function gUpdateTooltip(mouseX, mouseY, wrapW) {
   if (!gTtInside) {
     const loadPct = Math.min(100, (nearest.l / metricsNumCPUs) * 100);
     const ttDate = new Date(nearest.t * 1000);
-    document.getElementById('ttTime').innerHTML = escapeHtml(ttDate.toLocaleString()) + '<br><span style="color:#484f58">' + escapeHtml(ttDate.toLocaleString([], { timeZone: 'UTC' })) + ' UTC</span>';
+    document.getElementById('ttTime').innerHTML = escapeHtml(ttDate.toLocaleString([], { hour12: false })) + '<br><span style="color:#484f58">' + escapeHtml(ttDate.toLocaleString([], { hour12: false, timeZone: 'UTC' })) + ' UTC</span>';
     document.getElementById('ttMem').textContent   = 'Memory: ' + nearest.m + '%';
     document.getElementById('ttLoad').textContent  = 'Load: ' + loadPct.toFixed(1) + '% (1m avg)';
 
@@ -1348,8 +1348,8 @@ function gInitEvents() {
     const loadPct = Math.min(100, (gHoverPoint.l / metricsNumCPUs) * 100);
     const cpDate = new Date(gHoverPoint.t * 1000);
     const text = [
-      'Time: '   + cpDate.toLocaleString(),
-      'UTC:  '   + cpDate.toLocaleString([], { timeZone: 'UTC' }) + ' UTC',
+      'Time: '   + cpDate.toLocaleString([], { hour12: false }),
+      'UTC:  '   + cpDate.toLocaleString([], { hour12: false, timeZone: 'UTC' }) + ' UTC',
       'Memory: ' + gHoverPoint.m + '%',
       'Load: '   + loadPct.toFixed(1) + '% (1m avg)',
     ].join('\n');

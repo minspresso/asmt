@@ -236,8 +236,9 @@ func buildCheckers(cfg *Config, tr *Translations, logger *slog.Logger) ([]Checke
 	}
 
 	if cfg.Checks.Firewall.Enabled {
+		ports := filterFirewallPorts(cfg.Checks.Firewall.Ports, cfg, logger)
 		checkers = append(checkers, &FirewallChecker{
-			Ports: cfg.Checks.Firewall.Ports,
+			Ports: ports,
 			tr:    tr,
 		})
 	}
@@ -293,6 +294,36 @@ func buildCheckers(cfg *Config, tr *Translations, logger *slog.Logger) ([]Checke
 	checkers = appendEndpointCheckers(checkers, cfg, tr)
 
 	return checkers, mariadbChecker, postgresChecker
+}
+
+// filterFirewallPorts drops ports already covered by a service-level checker.
+// A raw TCP dial-and-close to an auth-gated service (e.g. MariaDB on 3306)
+// makes the server log an "aborted connection" warning every cycle. The
+// service checker does a real handshake, which is strictly stronger than the
+// port probe, so the overlap is pure noise.
+func filterFirewallPorts(ports []int, cfg *Config, logger *slog.Logger) []int {
+	covered := map[int]string{}
+	if cfg.Checks.MariaDB.Enabled && cfg.Checks.MariaDB.DSN != "" {
+		covered[3306] = "mariadb"
+	}
+	if cfg.Checks.PostgreSQL.Enabled && cfg.Checks.PostgreSQL.DSN != "" {
+		covered[5432] = "postgresql"
+	}
+	if cfg.Checks.Redis.Enabled {
+		covered[6379] = "redis"
+	}
+	if len(covered) == 0 {
+		return ports
+	}
+	out := make([]int, 0, len(ports))
+	for _, p := range ports {
+		if name, skip := covered[p]; skip {
+			logger.Info("firewall probe skipped, port already covered by service checker", "port", p, "checker", name)
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 func appendEndpointCheckers(checkers []Checker, cfg *Config, tr *Translations) []Checker {

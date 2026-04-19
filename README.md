@@ -29,7 +29,7 @@ ASMT runs as a background service and continuously checks the health of your ser
 | **Redis** | PING/PONG over raw TCP, optional AUTH |
 | **WordPress** | Site HTTP response, wp-cron endpoint, REST API |
 | **Custom HTTP endpoints** | Status code, optional body substring, custom headers |
-| **Firewall** | TCP dial to configured ports on localhost |
+| **Firewall** | TCP dial to configured ports on localhost. Ports already covered by a service checker (3306 MariaDB, 5432 PostgreSQL, 6379 Redis) are skipped so the service does not log "aborted connection" warnings every cycle. |
 | **GCP Load Balancer** | Metadata server reachable, LB path probe |
 | **Log watcher** | Tails log files, matches 26 known error patterns with mitigation advice |
 
